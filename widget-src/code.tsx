@@ -108,6 +108,45 @@ const ChevronRightIcon = ({ color = "#666666", size = 12 }: { color?: string, si
   />
 )
 
+const QuickScanIcon = ({ color = "#69008C", size = 20 }: { color?: string, size?: number }) => (
+  <SVG
+    src={`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 6H3"/>
+      <path d="M10 12H3"/>
+      <path d="M10 18H3"/>
+      <circle cx="17" cy="15" r="3"/>
+      <path d="m21 19-1.9-1.9"/>
+    </svg>`}
+  />
+)
+
+const CurrentPageIcon = ({ color = "#1976D2", size = 20 }: { color?: string, size?: number }) => (
+  <SVG
+    src={`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 10V7l-5-5H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h4"/>
+      <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+      <path d="M16 14a2 2 0 0 0-2 2"/>
+      <path d="M20 14a2 2 0 0 1 2 2"/>
+      <path d="M20 22a2 2 0 0 0 2-2"/>
+      <path d="M16 22a2 2 0 0 1-2-2"/>
+    </svg>`}
+  />
+)
+
+const EntireDocumentIcon = ({ color = "#F57C00", size = 20 }: { color?: string, size?: number }) => (
+  <SVG
+    src={`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+      <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+      <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+      <path d="M7 8h8"/>
+      <path d="M7 12h10"/>
+      <path d="M7 16h6"/>
+    </svg>`}
+  />
+)
+
 function Widget() {
   const [auditData, setAuditData] = useSyncedState<ComponentAuditData[]>('auditData', [])
   const [quickScanData, setQuickScanData] = useSyncedState<QuickScanData | null>('quickScanData', null)
@@ -158,9 +197,9 @@ function Widget() {
         const fills = node.fills as readonly Paint[];
         fills.forEach((fill, index) => {
           if (fill.type === 'SOLID') {
-            const isBound = 'boundVariables' in fill && 
-                           fill.boundVariables && 
-                           fill.boundVariables.color !== undefined;
+            // Check for fill color variables - stored in boundVariables.fills array  
+            const isBound = node.boundVariables && 
+                           node.boundVariables.fills !== undefined;
             
             const hasStyle = 'fillStyleId' in node && 
                            node.fillStyleId && 
@@ -184,9 +223,9 @@ function Widget() {
         if (visibleStrokes.length > 0) {
           visibleStrokes.forEach((stroke, index) => {
           if (stroke.type === 'SOLID') {
-            const isBound = 'boundVariables' in stroke && 
-                           stroke.boundVariables && 
-                             stroke.boundVariables.color !== undefined;
+            // Check for stroke color variables - stored in boundVariables.strokes array
+            const isBound = node.boundVariables && 
+                           node.boundVariables.strokes !== undefined;
             
             const hasStyle = 'strokeStyleId' in node && 
                            node.strokeStyleId && 
@@ -287,9 +326,12 @@ function Widget() {
         const layoutNode = node as FrameNode;
         
         if ('layoutMode' in layoutNode && layoutNode.layoutMode !== 'NONE') {
-          if ('itemSpacing' in layoutNode && layoutNode.itemSpacing > 0) {
+          // Check for hardcoded itemSpacing values
+          // Note: Figma's "auto" spacing typically resolves to 10px, so we treat 10px as acceptable
+          if ('itemSpacing' in layoutNode && layoutNode.itemSpacing > 0 && layoutNode.itemSpacing !== 10) {
             const hasItemSpacingVar = layoutNode.boundVariables && 
                                      layoutNode.boundVariables.itemSpacing !== undefined;
+            
             if (!hasItemSpacingVar) {
               unboundProperties.push({
                 type: 'spacing',
@@ -354,12 +396,16 @@ function Widget() {
                                   node.strokes.some(stroke => stroke.visible !== false);
         
         if (hasVisibleStrokes) {
-        const hasStrokeWeightVar = node.boundVariables && 
-                                    node.boundVariables.strokeWeight !== undefined;
+        const hasStrokeWeightVar = node.boundVariables && (
+                                    node.boundVariables.strokeTopWeight !== undefined ||
+                                    node.boundVariables.strokeBottomWeight !== undefined ||
+                                    node.boundVariables.strokeLeftWeight !== undefined ||
+                                    node.boundVariables.strokeRightWeight !== undefined
+                                  );
         
         if (!hasStrokeWeightVar) {
           unboundProperties.push({
-            type: 'strokeWeight',
+            type: 'stroke',
             property: 'Stroke Weight',
             currentValue: safeText(`${node.strokeWeight}px`),
             nodePath: safeText(currentPath)
@@ -1016,12 +1062,11 @@ const navigateToComponent = async (componentId: string) => {
 
     const typeLabels = {
       fill: '🎨 Colors (Fill)',
-      stroke: '🖊️ Colors (Stroke)', 
+      stroke: '🖊️ Stroke Properties', 
       text: '📝 Typography',
       cornerRadius: '📐 Corner Radius',
       spacing: '📏 Spacing',
       effect: '✨ Effects',
-      strokeWeight: '📏 Stroke Weight',
       unknown: '❓ Unknown Type'
     }
 
@@ -1052,7 +1097,14 @@ const navigateToComponent = async (componentId: string) => {
                   width="fill-parent"
                   >
                   {safeNodePath !== 'N/A' && (
-                      <Text fontSize={11} fontWeight={600} fill="#6A0000">{safeNodePath}</Text>
+                      <Text 
+                        fontSize={11} 
+                        fontWeight={600} 
+                        fill="#6A0000" 
+                        width="fill-parent"
+                      >
+                        {safeNodePath}
+                      </Text>
                   )}
                     <AutoLayout direction="horizontal" spacing={8} width="fill-parent">
                       <Text fontSize={11} fill="#6A0000" width={160}>{safeProperty}:</Text>
@@ -1638,71 +1690,79 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
     {!isQuickScanning && !isDeepScanning && auditData.length === 0 && (
       <AutoLayout direction="vertical" spacing={12} width="fill-parent">
         <AutoLayout direction="vertical" spacing={8} width="fill-parent">
-          <Text fontSize={14} fontWeight={600}>Scan Options</Text>
           
           {/* Quick Scan Option */}
           <AutoLayout direction="vertical" spacing={8} padding={12} fill="#FAECFF" cornerRadius={16} width="fill-parent">
             <AutoLayout direction="vertical" spacing={4} width="fill-parent">
-              <Text fontSize={12} fontWeight={600} fill="#8C00BA">🚀 Quick Scan</Text>
+              <AutoLayout direction="horizontal" spacing={4} verticalAlignItems="center">
+                <QuickScanIcon color="#8C00BA" size={16} />
+                <Text fontSize={12} fontWeight={600} fill="#8C00BA">Quick scan</Text>
+              </AutoLayout>
               <Text fontSize={11} fill="#8C00BA" width="fill-parent">
                 Fast overview of all components across your document. Shows counts, missing descriptions, and documentation links.
               </Text>
             </AutoLayout>
             <AutoLayout 
-              fill="#EFBEFF"
+              fill="#F3D0FF"
               cornerRadius={8} 
               padding={{ vertical: 6, horizontal: 10 }} 
-              stroke="#E498FF"
+              stroke="#CB3BFE"
               strokeWidth={1}
               onClick={runQuickScan}
-              hoverStyle={{ fill: "#FCF5FF", stroke: "#8C00BA" }}
+              hoverStyle={{ fill: "#FAECFF" }}
               width="hug-contents"
             >
-              <Text fontSize={12} fill="#69008C" fontWeight={600}>Start Quick Scan</Text>
+              <Text fontSize={12} fill="#6D138B" fontWeight={600}>Start quick scan</Text>
             </AutoLayout>
           </AutoLayout>
 
           {/* Current Page Deep Scan Option */}
           <AutoLayout direction="vertical" spacing={8} padding={12} fill="#F0F8FF" cornerRadius={16} width="fill-parent">
             <AutoLayout direction="vertical" spacing={4} width="fill-parent">
-              <Text fontSize={12} fontWeight={600} fill="#1976D2">📄 Scan Current Page</Text>
+              <AutoLayout direction="horizontal" spacing={4} verticalAlignItems="center">
+                <CurrentPageIcon color="#1976D2" size={16} />
+                <Text fontSize={12} fontWeight={600} fill="#1976D2">Current page</Text>
+              </AutoLayout>
               <Text fontSize={11} fill="#1976D2" width="fill-parent">
                 Detailed analysis of components on the current page only. Includes unbound properties analysis.
               </Text>
             </AutoLayout>
             <AutoLayout 
-              fill="#E3F2FD"
+              fill="#D0EBFF"
               cornerRadius={8} 
               padding={{ vertical: 6, horizontal: 10 }} 
-              stroke="#BBDEFB"
+              stroke="#2B94EB"
               strokeWidth={1}
               onClick={runDeepScanCurrentPage}
-              hoverStyle={{ fill: "#F3E5F5", stroke: "#1976D2" }}
+              hoverStyle={{ fill: "#F0F8FF" }}
               width="hug-contents"
             >
-              <Text fontSize={12} fill="#1565C0" fontWeight={600}>Scan Current Page</Text>
+              <Text fontSize={12} fill="#0C4990" fontWeight={600}>Scan current page</Text>
             </AutoLayout>
           </AutoLayout>
 
           {/* All Pages Deep Scan Option */}
           <AutoLayout direction="vertical" spacing={8} padding={12} fill="#FFF3CD" cornerRadius={16} width="fill-parent">
             <AutoLayout direction="vertical" spacing={4} width="fill-parent">
-              <Text fontSize={12} fontWeight={600} fill="#856404">📚 Scan Entire Document</Text>
+              <AutoLayout direction="horizontal" spacing={4} verticalAlignItems="center">
+                <EntireDocumentIcon color="#856404" size={16} />
+                <Text fontSize={12} fontWeight={600} fill="#856404">Whole file</Text>
+              </AutoLayout>
               <Text fontSize={11} fill="#856404" width="fill-parent">
                 Complete analysis of all components across every page. May be slow and could crash Figma with large documents.
               </Text>
             </AutoLayout>
             <AutoLayout 
-              fill="#FFF8E1"
+              fill="#FEE591"
               cornerRadius={8} 
               padding={{ vertical: 6, horizontal: 10 }} 
-              stroke="#FFE082"
+              stroke="#AA8000"
               strokeWidth={1}
               onClick={runDeepScanAllPages}
-              hoverStyle={{ fill: "#FFFDE7", stroke: "#856404" }}
+              hoverStyle={{ fill: "#FFF3CD" }}
               width="hug-contents"
             >
-              <Text fontSize={12} fill="#6F4F00" fontWeight={600}>Scan Entire Document</Text>
+              <Text fontSize={12} fill="#5F4301" fontWeight={600}>Scan whole file</Text>
             </AutoLayout>
           </AutoLayout>
         </AutoLayout>
