@@ -1,6 +1,24 @@
 const { widget } = figma
 const { useSyncedState, useEffect, AutoLayout, Text, SVG, Rectangle } = widget
 
+// Helper function to ensure safe text rendering - never returns empty strings
+const safeText = (value: any): string => {
+  // Handle null, undefined, false, 0, etc.
+  if (value === null || value === undefined || value === false) return 'N/A'
+  
+  // Handle arrays and objects
+  if (typeof value === 'object') {
+    if (Array.isArray(value)) return `Array(${value.length})`
+    return 'Object'
+  }
+  
+  // Convert to string and clean
+  const str = String(value).trim()
+  
+  // Return N/A for any empty or whitespace-only strings
+  return str.length > 0 ? str : 'N/A'
+}
+
 interface UnboundProperty {
   type: 'fill' | 'stroke' | 'text' | 'cornerRadius' | 'spacing' | 'effect' | 'strokeWeight'
   property: string
@@ -132,7 +150,9 @@ function Widget() {
     const unboundProperties: UnboundProperty[] = [];
 
     const checkNodeForUnboundProps = (node: SceneNode, path: string = ''): void => {
-      const currentPath = path ? `${path} > ${node.name || node.type}` : node.name || node.type;
+      // Ensure we never create empty currentPath using safeText
+      const safeName = safeText(node.name) !== 'N/A' ? safeText(node.name) : (node.type || 'Node');
+      const currentPath = path ? `${path} > ${safeName}` : safeName;
 
       if ('fills' in node && node.fills && node.fills !== figma.mixed) {
         const fills = node.fills as readonly Paint[];
@@ -150,8 +170,8 @@ function Widget() {
               unboundProperties.push({
                 type: 'fill',
                 property: fills.length > 1 ? `Fill ${index + 1}` : 'Fill',
-                currentValue: formatColor(fill.color),
-                nodePath: currentPath
+                currentValue: safeText(formatColor(fill.color)),
+                nodePath: safeText(currentPath)
               });
             }
           }
@@ -176,8 +196,8 @@ function Widget() {
               unboundProperties.push({
                 type: 'stroke',
                   property: visibleStrokes.length > 1 ? `Stroke ${index + 1}` : 'Stroke',
-                currentValue: formatColor(stroke.color),
-                nodePath: currentPath
+                currentValue: safeText(formatColor(stroke.color)),
+                nodePath: safeText(currentPath)
                 });
             }
           }
@@ -196,20 +216,24 @@ function Widget() {
           const hasLineHeightVar = textNode.boundVariables && textNode.boundVariables.lineHeight !== undefined;
           
           if (!hasFontFamilyVar) {
+            const fontFamilyValue = textNode.fontName !== figma.mixed ? 
+              (textNode.fontName.family || 'Unknown Font') : 'Mixed';
             unboundProperties.push({
               type: 'text',
               property: 'Font Family',
-              currentValue: textNode.fontName !== figma.mixed ? `${textNode.fontName.family}` : 'Mixed',
-              nodePath: currentPath
+              currentValue: safeText(fontFamilyValue),
+              nodePath: safeText(currentPath)
             });
           }
           
           if (!hasFontSizeVar) {
+            const fontSizeValue = textNode.fontSize !== figma.mixed ? 
+              `${textNode.fontSize}px` : 'Mixed';
             unboundProperties.push({
               type: 'text',
               property: 'Font Size',
-              currentValue: textNode.fontSize !== figma.mixed ? `${textNode.fontSize}px` : 'Mixed',
-              nodePath: currentPath
+              currentValue: safeText(fontSizeValue),
+              nodePath: safeText(currentPath)
             });
           }
           
@@ -230,12 +254,13 @@ function Widget() {
               lineHeightValue = `${textNode.lineHeight}`;
             }
             
-            if (textNode.lineHeight.unit !== 'AUTO' && lineHeightValue !== '') {
+            // Only add if we have a valid line height value
+            if (textNode.lineHeight.unit !== 'AUTO' && lineHeightValue && lineHeightValue.trim()) {
               unboundProperties.push({
                 type: 'text',
                 property: 'Line Height',
-                currentValue: lineHeightValue,
-                nodePath: currentPath
+                currentValue: safeText(lineHeightValue),
+                nodePath: safeText(currentPath)
               });
             }
           }
@@ -251,8 +276,8 @@ function Widget() {
             unboundProperties.push({
               type: 'cornerRadius',
               property: 'Corner Radius',
-              currentValue: `${node.cornerRadius}px`,
-              nodePath: currentPath
+              currentValue: safeText(`${node.cornerRadius}px`),
+              nodePath: safeText(currentPath)
             });
           }
         }
@@ -269,8 +294,8 @@ function Widget() {
               unboundProperties.push({
                 type: 'spacing',
                 property: 'Item Spacing',
-                currentValue: `${layoutNode.itemSpacing}px`,
-                nodePath: currentPath
+                currentValue: safeText(`${layoutNode.itemSpacing}px`),
+                nodePath: safeText(currentPath)
               });
             }
           }
@@ -291,8 +316,8 @@ function Widget() {
                   unboundProperties.push({
                     type: 'spacing',
                     property: padding.name,
-                    currentValue: `${padding.value}px`,
-                    nodePath: currentPath
+                    currentValue: safeText(`${padding.value}px`),
+                    nodePath: safeText(currentPath)
                   });
                 }
               }
@@ -312,8 +337,8 @@ function Widget() {
               unboundProperties.push({
                 type: 'effect',
                 property: node.effects.length > 1 ? `Effect ${index + 1} (${effect.type})` : `Effect (${effect.type})`,
-                currentValue: effect.type,
-                nodePath: currentPath
+                currentValue: safeText(effect.type),
+                nodePath: safeText(currentPath)
               });
             }
           });
@@ -336,8 +361,8 @@ function Widget() {
           unboundProperties.push({
             type: 'strokeWeight',
             property: 'Stroke Weight',
-            currentValue: `${node.strokeWeight}px`,
-            nodePath: currentPath
+            currentValue: safeText(`${node.strokeWeight}px`),
+            nodePath: safeText(currentPath)
             });
           }
         }
@@ -378,89 +403,104 @@ function Widget() {
 
   const processPageComponentsQuick = (page: PageNode): ComponentAuditData[] => {
     const components = page.findAll(node => node.type === 'COMPONENT') as ComponentNode[]
+    const safePageName = (page.name || '').trim() || 'Unnamed Page'
+    const currentPageName = (figma.currentPage.name || '').trim() || 'Current Page'
     
     return components.map(component => {
       let componentSetName: string | undefined
       let variantProperties: Record<string, string> | undefined
+      const displayName = (component.name || '').trim() || 'Unnamed Component'
 
       if (component.parent && component.parent.type === 'COMPONENT_SET') {
         const componentSet = component.parent as ComponentSetNode
-        componentSetName = componentSet.name
+        componentSetName = (componentSet.name || '').trim() || undefined
         
-        const variantString = component.name
-        const properties: Record<string, string> = {}
-        
-        const pairs = variantString.split(',').map(pair => pair.trim())
-        pairs.forEach(pair => {
-          const [key, value] = pair.split('=').map(part => part.trim())
-          if (key && value) {
-            properties[key] = value
+        const variantString = (component.name || '').trim()
+        if (variantString) {
+          const properties: Record<string, string> = {}
+          
+          const pairs = variantString.split(',')
+            .map(pair => pair.trim())
+            .filter(pair => pair.length > 0 && pair.includes('='))
+          
+          pairs.forEach(pair => {
+            const [key, value] = pair.split('=').map(part => part.trim())
+            if (key && key.length > 0 && value && value.length > 0) {
+              properties[key] = value
+            }
+          })
+          
+          if (Object.keys(properties).length > 0) {
+            variantProperties = properties
           }
-        })
-        
-        if (Object.keys(properties).length > 0) {
-          variantProperties = properties
         }
       }
 
       return {
-        id: component.id,
-        name: component.name,
+        id: component.id || 'unknown-component',
+        name: displayName,
         componentSetName,
         variantProperties,
-        pageName: page.name,
+        pageName: safePageName,
         hasDescription: hasDescription(component),
         hasDocumentationLink: hasDocumentationLink(component),
         hasUnboundProperties: false, // Skip for quick scan
         unboundProperties: [], // Skip for quick scan
-        isHiddenFromPublishing: isHiddenFromPublishing(componentSetName || component.name),
-        isOnCurrentPage: page.name === figma.currentPage.name
+        isHiddenFromPublishing: isHiddenFromPublishing(componentSetName || displayName),
+        isOnCurrentPage: safePageName === currentPageName
       }
     })
   }
 
   const processPageComponents = (page: PageNode): ComponentAuditData[] => {
     const components = page.findAll(node => node.type === 'COMPONENT') as ComponentNode[]
+    const safePageName = (page.name || '').trim() || 'Unnamed Page'
+    const currentPageName = (figma.currentPage.name || '').trim() || 'Current Page'
     
     return components.map(component => {
       let componentSetName: string | undefined
       let variantProperties: Record<string, string> | undefined
-      let displayName = component.name
+      let displayName = (component.name || '').trim() || 'Unnamed Component'
 
       if (component.parent && component.parent.type === 'COMPONENT_SET') {
         const componentSet = component.parent as ComponentSetNode
-        componentSetName = componentSet.name
+        componentSetName = (componentSet.name || '').trim() || undefined
         
-        const variantString = component.name
-        const properties: Record<string, string> = {}
-        
-        const pairs = variantString.split(',').map(pair => pair.trim())
-        pairs.forEach(pair => {
-          const [key, value] = pair.split('=').map(part => part.trim())
-          if (key && value) {
-            properties[key] = value
+        const variantString = (component.name || '').trim()
+        if (variantString) {
+          const properties: Record<string, string> = {}
+          
+          const pairs = variantString.split(',')
+            .map(pair => pair.trim())
+            .filter(pair => pair.length > 0 && pair.includes('='))
+          
+          pairs.forEach(pair => {
+            const [key, value] = pair.split('=').map(part => part.trim())
+            if (key && key.length > 0 && value && value.length > 0) {
+              properties[key] = value
+            }
+          })
+          
+          if (Object.keys(properties).length > 0) {
+            variantProperties = properties
           }
-        })
-        
-        if (Object.keys(properties).length > 0) {
-          variantProperties = properties
         }
       }
 
       const unboundCheck = checkForUnboundProperties(component)
 
       return {
-        id: component.id,
+        id: component.id || 'unknown-component',
         name: displayName,
         componentSetName,
         variantProperties,
-        pageName: page.name,
+        pageName: safePageName,
         hasDescription: hasDescription(component),
         hasDocumentationLink: hasDocumentationLink(component),
         hasUnboundProperties: unboundCheck.hasUnbound,
         unboundProperties: unboundCheck.properties,
-        isHiddenFromPublishing: isHiddenFromPublishing(componentSetName || component.name),
-        isOnCurrentPage: page.name === figma.currentPage.name
+        isHiddenFromPublishing: isHiddenFromPublishing(componentSetName || displayName),
+        isOnCurrentPage: safePageName === currentPageName
       }
     })
   }
@@ -526,107 +566,7 @@ function Widget() {
     }
   }
 
-  const runDeepScan = async () => {
-    setIsDeepScanning(true)
-    setAuditData([])
-    setPageProgress([])
-    setExpandedPages([])
-    setExpandedComponents([])
-    setPageDisplayCounts({})
-    
-    try {
-      if (currentPageOnly) {
-        setCurrentProgress('Deep scanning current page...')
-        const currentPage = figma.currentPage
-        
-        setPageProgress([{
-          name: currentPage.name,
-          status: 'loading',
-          componentCount: 0
-        }])
 
-        const pageComponents = processPageComponents(currentPage)
-        
-        setPageProgress([{
-          name: currentPage.name,
-          status: 'complete',
-          componentCount: pageComponents.length
-        }])
-
-        setAuditData(pageComponents)
-        setExpandedPages([currentPage.name])
-        setPageDisplayCounts({ [currentPage.name]: CHUNK_SIZE })
-              setCurrentProgress(`Deep scan complete: Found ${pageComponents.length} components`)
-        
-      } else {
-      setCurrentProgress('Deep scanning all pages...')
-        
-        await figma.loadAllPagesAsync()
-        const allPages = figma.root.children.filter(child => child.type === 'PAGE') as PageNode[]
-        
-        const initialProgress: PageProgress[] = allPages.map(page => ({
-          name: page.name,
-          status: 'pending',
-          componentCount: 0
-        }))
-        setPageProgress(initialProgress)
-
-        let allComponents: ComponentAuditData[] = []
-        
-        for (let i = 0; i < allPages.length; i++) {
-          const page = allPages[i]
-          
-          try {
-          setCurrentProgress(`Deep scanning page ${i + 1}/${allPages.length}: ${page.name}`)
-            setPageProgress(prev => prev.map(p => 
-              p.name === page.name 
-                ? { ...p, status: 'loading' }
-                : p
-            ))
-
-            const pageComponents = processPageComponents(page)
-            allComponents = [...allComponents, ...pageComponents]
-            
-            setPageProgress(prev => prev.map(p => 
-              p.name === page.name 
-                ? { ...p, status: 'complete', componentCount: pageComponents.length }
-                : p
-            ))
-
-            setAuditData([...allComponents])
-            await new Promise(resolve => setTimeout(resolve, 200))
-            
-          } catch (error) {
-            console.error(`Error processing page ${page.name}:`, error)
-            setPageProgress(prev => prev.map(p => 
-              p.name === page.name 
-                ? { ...p, status: 'error', componentCount: 0 }
-                : p
-            ))
-          }
-        }
-
-      setCurrentProgress(`Deep scan complete! Found ${allComponents.length} components across ${allPages.length} pages`)
-    }
-
-    setLastScanTime(new Date().toUTCString())
-    
-    // Auto-collapse the progress accordion after scan completes
-    setTimeout(() => {
-      setIsProgressExpanded(false)
-    }, 1000)
-      
-    } catch (error) {
-      console.error('Error during deep scan:', error)
-      setCurrentProgress('Error occurred during deep scan')
-    } finally {
-      setIsDeepScanning(false)
-      setTimeout(() => {
-        setCurrentProgress('')
-        setPageProgress([])
-      }, 3000)
-    }
-  }
 
   const generateSummaryText = (): string => {
     if (!quickScanData) return ''
@@ -864,7 +804,61 @@ const navigateToComponent = async (componentId: string) => {
     setExpandedPages([])
     setExpandedComponents([])
     setPageDisplayCounts({})
+  }
 
+  // Helper function to clean component data for serialization
+  const cleanComponentData = (components: ComponentAuditData[]): ComponentAuditData[] => {
+    try {
+      return components.map((component, index) => {
+        try {
+          return {
+            ...component,
+            // Ensure all required properties have values
+            id: (component.id || '').trim() || `generated-${index}`,
+            name: (component.name || '').trim() || 'Unnamed Component',
+            pageName: (component.pageName || '').trim() || 'Unknown Page',
+            // Ensure all properties are serializable and have default values
+            unboundProperties: component.unboundProperties?.map(prop => ({
+              type: prop.type || 'unknown',
+              property: (prop.property || '').trim() || 'Unknown Property',
+              currentValue: (prop.currentValue || '').trim() || 'N/A',
+              nodePath: (prop.nodePath || '').trim() || 'Unknown Path'
+            })) || [],
+            // Ensure other optional properties have proper values
+            componentSetName: component.componentSetName ? 
+              (component.componentSetName.trim() || undefined) : undefined,
+            variantProperties: component.variantProperties ? 
+              (() => {
+                const cleanedProps: Record<string, string> = {}
+                for (const key in component.variantProperties) {
+                  const value = component.variantProperties[key]
+                  if (key && key.trim() && value && value.trim()) {
+                    cleanedProps[key.trim()] = value.trim()
+                  }
+                }
+                return Object.keys(cleanedProps).length > 0 ? cleanedProps : undefined
+              })() : undefined
+          }
+        } catch (componentError) {
+          console.error(`Error cleaning component at index ${index}:`, componentError, component)
+          // Return a minimal valid component structure
+          return {
+            id: (component?.id || '').trim() || `error-${index}`,
+            name: (component?.name || '').trim() || 'Error Component',
+            pageName: (component?.pageName || '').trim() || 'Unknown Page',
+            hasDescription: false,
+            hasDocumentationLink: false,
+            hasUnboundProperties: false,
+            unboundProperties: [],
+            isHiddenFromPublishing: false,
+            isOnCurrentPage: false
+          }
+        }
+      })
+    } catch (error) {
+      console.error('Error in cleanComponentData:', error)
+      return []
+    }
   }
 
   const QuickScanResults = () => {
@@ -876,22 +870,22 @@ const navigateToComponent = async (componentId: string) => {
         <AutoLayout direction="horizontal" spacing={4} width="fill-parent" wrap={true}>
           <Text fontSize={16} fill="#8C00BA">Out</Text>
           <Text fontSize={16} fill="#8C00BA">of</Text>
-          <Text fontSize={16} fontWeight={700} fill="#8C00BA">{quickScanData.totalPages.toString()}</Text>
+          <Text fontSize={16} fontWeight={700} fill="#8C00BA">{safeText(quickScanData.totalPages)}</Text>
           <Text fontSize={16} fill="#8C00BA">pages,</Text>
-          <Text fontSize={16} fontWeight={700} fill="#8C00BA">{quickScanData.pagesWithComponents.toString()}</Text>
+          <Text fontSize={16} fontWeight={700} fill="#8C00BA">{safeText(quickScanData.pagesWithComponents)}</Text>
           <Text fontSize={16} fill="#8C00BA">have</Text>
           <Text fontSize={16} fill="#8C00BA">components.</Text>
           <Text fontSize={16} fill="#8C00BA">We</Text>
           <Text fontSize={16} fill="#8C00BA">found</Text>
-          <Text fontSize={16} fontWeight={700} fill="#8C00BA">{quickScanData.uniqueComponents.toString()}</Text>
+          <Text fontSize={16} fontWeight={700} fill="#8C00BA">{safeText(quickScanData.uniqueComponents)}</Text>
           <Text fontSize={16} fill="#8C00BA">unique</Text>
           <Text fontSize={16} fill="#8C00BA">components</Text>
           <Text fontSize={16} fill="#8C00BA">and</Text>
-          <Text fontSize={16} fontWeight={700} fill="#8C00BA">{quickScanData.totalVariants.toString()}</Text>
+          <Text fontSize={16} fontWeight={700} fill="#8C00BA">{safeText(quickScanData.totalVariants)}</Text>
           <Text fontSize={16} fill="#8C00BA">total</Text>
           <Text fontSize={16} fill="#8C00BA">variants.</Text>
           
-          <Text fontSize={16} fontWeight={700} fill="#8C00BA">{quickScanData.withoutDescription.toString()}/{quickScanData.totalVariants.toString()}</Text>
+          <Text fontSize={16} fontWeight={700} fill="#8C00BA">{safeText(quickScanData.withoutDescription)}/{safeText(quickScanData.totalVariants)}</Text>
           <Text fontSize={16} fill="#8C00BA">components</Text>
           <Text fontSize={16} fill="#8C00BA">do</Text>
           <Text fontSize={16} fill="#8C00BA">not</Text>
@@ -901,7 +895,7 @@ const navigateToComponent = async (componentId: string) => {
           <Text fontSize={16} fill="#8C00BA">set,</Text>
           <Text fontSize={16} fill="#8C00BA">and</Text>
           
-          <Text fontSize={16} fontWeight={700} fill="#8C00BA">{quickScanData.withoutDocs.toString()}/{quickScanData.totalVariants.toString()}</Text>
+          <Text fontSize={16} fontWeight={700} fill="#8C00BA">{safeText(quickScanData.withoutDocs)}/{safeText(quickScanData.totalVariants)}</Text>
           <Text fontSize={16} fill="#8C00BA">components</Text>
           <Text fontSize={16} fill="#8C00BA">do</Text>
           <Text fontSize={16} fill="#8C00BA">not</Text>
@@ -910,7 +904,7 @@ const navigateToComponent = async (componentId: string) => {
           <Text fontSize={16} fill="#8C00BA">documentation</Text>
           <Text fontSize={16} fill="#8C00BA">link.</Text>
           
-          <Text fontSize={16} fontWeight={700} fill="#8C00BA">{quickScanData.hiddenComponents.toString()}</Text>
+          <Text fontSize={16} fontWeight={700} fill="#8C00BA">{safeText(quickScanData.hiddenComponents)}</Text>
           <Text fontSize={16} fill="#8C00BA">components</Text>
           <Text fontSize={16} fill="#8C00BA">are</Text>
           <Text fontSize={16} fill="#8C00BA">hidden</Text>
@@ -931,9 +925,11 @@ const navigateToComponent = async (componentId: string) => {
             <Text fontSize={12} fill="#69008C" fontWeight={600}>Add summary the canvas</Text>
           </AutoLayout>
           
-          <Text fontSize={11} fill="#8C00BA">
-            {lastScanTime && `Scanned at ${lastScanTime}`}
-          </Text>
+          {lastScanTime && (
+            <Text fontSize={11} fill="#8C00BA">
+              {`Scanned at ${safeText(lastScanTime)}`}
+            </Text>
+          )}
         </AutoLayout>
       </AutoLayout>
     )
@@ -966,16 +962,16 @@ const navigateToComponent = async (componentId: string) => {
             <ChevronRightIcon color={textColor} size={16} />
           )}
           <Text fontSize={12} fontWeight={600} fill={textColor} width="fill-parent">
-          {currentProgress || 'Processing...'}
-        </Text>
+            {safeText(currentProgress) !== 'N/A' ? safeText(currentProgress) : 'Processing...'}
+          </Text>
         </AutoLayout>
         
         {isProgressExpanded && (
           <AutoLayout direction="vertical" spacing={4} padding={{ left: 8, right: 12, bottom: 12 }} width="fill-parent">
         {pageProgress.length > 0 && (
               <>
-            {pageProgress.map((page, index) => (
-              <AutoLayout key={index} direction="horizontal" spacing={8} verticalAlignItems="center" width="fill-parent">
+            {(pageProgress || []).map((page, index) => (
+              <AutoLayout key={`${safeText(page.name)}-${index}`} direction="horizontal" spacing={8} verticalAlignItems="center" width="fill-parent">
                     <AutoLayout direction="horizontal" spacing={2} verticalAlignItems="center">
                       <AutoLayout width={24} height={24} horizontalAlignItems="center" verticalAlignItems="center">
                         {page.status === 'pending' ? (
@@ -988,10 +984,10 @@ const navigateToComponent = async (componentId: string) => {
                           <XIcon />
                         )}
                       </AutoLayout>
-                      <Text fontSize={12} width={150} fill="#106A00">{page.name}</Text>
+                      <Text fontSize={12} width={150} fill="#106A00">{safeText(page.name)}</Text>
                     </AutoLayout>
                     <Text fontSize={12} fill="#106A00">
-                  {page.status === 'complete' ? `${page.componentCount} components` : 
+                  {page.status === 'complete' ? `${safeText(page.componentCount)} components` : 
                    page.status === 'loading' ? 'Loading...' :
                    page.status === 'error' ? 'Error' : 'Waiting...'}
                 </Text>
@@ -1010,10 +1006,11 @@ const navigateToComponent = async (componentId: string) => {
       if (!properties || properties.length === 0) return null
 
     const groupedProperties = properties.reduce((acc, prop) => {
-      if (!acc[prop.type]) {
-        acc[prop.type] = []
+      const safeType = (prop.type || '').trim() || 'unknown'
+      if (!acc[safeType]) {
+        acc[safeType] = []
       }
-      acc[prop.type].push(prop)
+      acc[safeType].push(prop)
       return acc
     }, {} as Record<string, UnboundProperty[]>)
 
@@ -1024,39 +1021,46 @@ const navigateToComponent = async (componentId: string) => {
       cornerRadius: '📐 Corner Radius',
       spacing: '📏 Spacing',
       effect: '✨ Effects',
-      strokeWeight: '📏 Stroke Weight'
+      strokeWeight: '📏 Stroke Weight',
+      unknown: '❓ Unknown Type'
     }
 
     return (
       <AutoLayout direction="vertical" spacing={12} width="fill-parent" padding={{ bottom: 12 }}>
         <Text fontSize={12} fontWeight={600} fill="#000">Properties without variables/styles</Text>
         
-        {Object.keys(groupedProperties).map((type, typeIndex, typeArray) => (
-          <AutoLayout key={type} direction="vertical" spacing={8} width="fill-parent">
+        {Object.keys(groupedProperties).map((type, typeIndex) => (
+          <AutoLayout key={`type-${type}-${typeIndex}`} direction="vertical" spacing={8} width="fill-parent">
             <Text fontSize={11} fontWeight={600} fill="#000">
-              {typeLabels[type as keyof typeof typeLabels] || type}
+              {typeLabels[type as keyof typeof typeLabels] || safeText(`Unknown Type (${type})`)}
             </Text>
             <AutoLayout direction="vertical" spacing={8} width="fill-parent">
-            {groupedProperties[type].map((prop, index) => (
-              <AutoLayout 
-                key={index} 
-                direction="vertical" 
-                spacing={4} 
-                  padding={{ top: 8, right: 16, bottom: 8, left: 16 }} 
-                  fill="#FFF2F2" 
-                  cornerRadius={8} 
-                  stroke="#FFD6D6"
-                width="fill-parent"
-                >
-                {prop.nodePath && (
-                    <Text fontSize={11} fontWeight={600} fill="#6A0000">{prop.nodePath}</Text>
-                )}
-                  <AutoLayout direction="horizontal" spacing={8} width="fill-parent">
-                    <Text fontSize={11} fill="#6A0000" width={160}>{prop.property}:</Text>
-                    <Text fontSize={11} fill="#6A0000">{prop.currentValue || 'N/A'}</Text>
-                  </AutoLayout>
-              </AutoLayout>
-            ))}
+            {(groupedProperties[type] || []).map((prop, index) => {
+              const safeProperty = safeText(prop.property)
+              const safeCurrentValue = safeText(prop.currentValue)
+              const safeNodePath = safeText(prop.nodePath)
+              
+              return (
+                <AutoLayout 
+                  key={`${safeText(type)}-${index}-${safeProperty}`} 
+                  direction="vertical" 
+                  spacing={4} 
+                    padding={{ top: 8, right: 16, bottom: 8, left: 16 }} 
+                    fill="#FFF2F2" 
+                    cornerRadius={8} 
+                    stroke="#FFD6D6"
+                  width="fill-parent"
+                  >
+                  {safeNodePath !== 'N/A' && (
+                      <Text fontSize={11} fontWeight={600} fill="#6A0000">{safeNodePath}</Text>
+                  )}
+                    <AutoLayout direction="horizontal" spacing={8} width="fill-parent">
+                      <Text fontSize={11} fill="#6A0000" width={160}>{safeProperty}:</Text>
+                      <Text fontSize={11} fill="#6A0000">{safeCurrentValue}</Text>
+                    </AutoLayout>
+                </AutoLayout>
+              )
+            })}
             </AutoLayout>
           </AutoLayout>
         ))}
@@ -1075,16 +1079,25 @@ const navigateToComponent = async (componentId: string) => {
 const ComponentTable = ({ components, displayedCount }: { components: ComponentAuditData[], displayedCount: number }) => {
   console.log('ComponentTable render:', { componentsLength: components.length, displayedCount })
   
-  // Use original components without grouping
-  const visibleComponents = components.slice(0, displayedCount)
-  const hasMore = components.length > displayedCount
+  // Filter and validate components before rendering
+  const validComponents = (components || []).filter(component => 
+    component && 
+    component.id && 
+    component.id.trim() && 
+    component.name && 
+    component.name.trim()
+  )
+  
+  // Use filtered components 
+  const visibleComponents = validComponents.slice(0, displayedCount)
+  const hasMore = validComponents.length > displayedCount
 
   // Safety check - if too many components, show warning instead
-  if (components.length > 100) {
+  if (validComponents.length > 100) {
   return (
       <AutoLayout direction="vertical" spacing={8} padding={12} fill="#FFF3CD" width="fill-parent">
         <Text fontSize={12} fill="#856404" fontWeight={600}>
-          ⚠️ Too many components ({components.length})
+          ⚠️ Too many components ({validComponents.length})
         </Text>
         <Text fontSize={11} fill="#856404" width="fill-parent">
           This page has too many components to display safely. Consider scanning individual pages instead.
@@ -1106,27 +1119,50 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
       
       {visibleComponents.map((component, index) => {
         const isExpanded = expandedComponents.includes(component.id)
+        
+        // Complete safety for all component properties
+        const safeComponent = {
+          id: (component.id || '').trim() || `component-${index}`,
+          name: (component.name || '').trim() || 'Unnamed Component',
+          componentSetName: component.componentSetName ? 
+            (component.componentSetName.trim() || undefined) : undefined,
+          pageName: (component.pageName || '').trim() || 'Unknown Page',
+          hasDescription: Boolean(component.hasDescription),
+          hasDocumentationLink: Boolean(component.hasDocumentationLink),
+          hasUnboundProperties: Boolean(component.hasUnboundProperties),
+          unboundProperties: component.unboundProperties || [],
+          isHiddenFromPublishing: Boolean(component.isHiddenFromPublishing),
+          isOnCurrentPage: Boolean(component.isOnCurrentPage),
+          // Clean variant properties completely
+          variantProperties: component.variantProperties ? (() => {
+            const cleaned: Record<string, string> = {}
+            for (const key in component.variantProperties) {
+              const value = component.variantProperties[key]
+              const cleanKey = (key || '').trim()
+              const cleanValue = (value || '').trim()
+              if (cleanKey && cleanValue) {
+                cleaned[cleanKey] = cleanValue
+              }
+            }
+            return Object.keys(cleaned).length > 0 ? cleaned : undefined
+          })() : undefined
+        }
           
           console.log('Rendering component:', { 
             index, 
-            componentId: component.id, 
-            componentName: component.name, 
+            componentId: safeComponent.id, 
+            componentName: safeComponent.name, 
             isExpanded,
-            hasUnboundProperties: component.hasUnboundProperties,
-            unboundPropertiesLength: component.unboundProperties?.length,
-            componentSetName: component.componentSetName,
-            variantProperties: component.variantProperties
+            hasUnboundProperties: safeComponent.hasUnboundProperties,
+            unboundProperties: safeComponent.unboundProperties.length,
+            componentSetName: safeComponent.componentSetName,
+            variantProperties: safeComponent.variantProperties
           })
           
-          try {
-            // Validate component data before rendering
-            if (!component || !component.id || !component.name) {
-              throw new Error('Invalid component data')
-            }
-        
-                                console.log('Starting JSX render for component:', component.name)
+          try {            
+                                console.log('Starting JSX render for component:', safeComponent.name)
             return (
-            <AutoLayout key={component.id} direction="vertical" spacing={0} width="fill-parent">
+            <AutoLayout key={safeComponent.id} direction="vertical" spacing={0} width="fill-parent">
               <AutoLayout
                 direction="horizontal" 
                 spacing={0} 
@@ -1137,13 +1173,13 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
                 verticalAlignItems="center"
               >
                 <AutoLayout width={260} direction="horizontal" spacing={8} verticalAlignItems="center">
-                  {component.hasUnboundProperties && (
+                  {safeComponent.hasUnboundProperties && (
                     <AutoLayout 
                       width={16} 
                       height={16} 
                       horizontalAlignItems="center" 
                       verticalAlignItems="center"
-                      onClick={() => toggleComponentExpansion(component.id)}
+                      onClick={() => toggleComponentExpansion(safeComponent.id)}
                       hoverStyle={{ fill: "#eee" }}
                       cornerRadius={2}
                     >
@@ -1159,32 +1195,36 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
                     direction="vertical" 
                     spacing={2} 
                     width="fill-parent"
-                    onClick={() => navigateToComponent(component.id)}
+                    onClick={() => navigateToComponent(safeComponent.id)}
                   >
-                    {component.componentSetName ? (
+                    {safeComponent.componentSetName ? (
                       <>
                         <Text fontSize={11} fill="#1976D2" fontWeight={600} width="fill-parent">
-                          {component.componentSetName}
+                          {safeText(safeComponent.componentSetName)}
                         </Text>
-                        {component.variantProperties && (
+                        {safeComponent.variantProperties && (
                           <AutoLayout direction="vertical" spacing={1}>
-                            {Object.keys(component.variantProperties).map(key => (
-                              <Text key={key} fontSize={10} fill="#333333">
-                                {`${key}: ${component.variantProperties![key]}`}
-                              </Text>
-                            ))}
+                            {Object.keys(safeComponent.variantProperties).map(key => {
+                              const value = safeComponent.variantProperties![key]
+                              const displayText = `${safeText(key)}: ${safeText(value)}`
+                              return (
+                                <Text key={`${safeText(key)}-${safeText(value)}`} fontSize={10} fill="#333333">
+                                  {displayText}
+                                </Text>
+                              )
+                            })}
                           </AutoLayout>
                         )}
-                        {component.isHiddenFromPublishing && (
+                        {safeComponent.isHiddenFromPublishing && (
                           <Text fontSize={9} fill="#222">Hidden from publishing</Text>
                         )}
                       </>
                     ) : (
                       <>
                         <Text fontSize={11} fill="#1976D2" fontWeight={600} width={"fill-parent"}>
-                          {component.name}
+                          {safeText(safeComponent.name)}
                         </Text>
-                        {component.isHiddenFromPublishing && (
+                        {safeComponent.isHiddenFromPublishing && (
                           <Text fontSize={9} fill="#222">Hidden from publishing</Text>
                         )}
                       </>
@@ -1193,7 +1233,7 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
                 </AutoLayout>
                 
                 <AutoLayout horizontalAlignItems="center" verticalAlignItems="center" height={24} width={70}>
-                  {component.hasDescription ? (
+                  {safeComponent.hasDescription ? (
                     <CircleCheckIcon />
                   ) : (
                     <XIcon />
@@ -1201,7 +1241,7 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
                 </AutoLayout>
                 
                 <AutoLayout horizontalAlignItems="center" verticalAlignItems="center" height={24} width={70}>
-                  {component.hasDocumentationLink ? (
+                  {safeComponent.hasDocumentationLink ? (
                     <CircleCheckIcon />
                   ) : (
                     <XIcon />
@@ -1210,26 +1250,26 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
                 
                 <AutoLayout horizontalAlignItems="center" verticalAlignItems="center" height={24} width={70}>
                   <AutoLayout direction="horizontal" spacing={4} verticalAlignItems="center">
-                    {component.hasUnboundProperties ? (
+                    {safeComponent.hasUnboundProperties ? (
                       <XIcon />
                     ) : (
                       <CircleCheckIcon />
                     )}
-                    {component.hasUnboundProperties && (
+                    {safeComponent.hasUnboundProperties && (
                       <Text fontSize={10} fill="#F44336" fontWeight={600}>
-                        {component.unboundProperties.length}
+                        {safeText(safeComponent.unboundProperties.length)}
                       </Text>
                     )}
                   </AutoLayout>
                 </AutoLayout>
                 
-                {component.isOnCurrentPage && (
+                {safeComponent.isOnCurrentPage && (
                   <AutoLayout 
                     horizontalAlignItems="center" 
                     verticalAlignItems="center" 
                     width={24}
                     height={24}
-                    onClick={() => navigateToComponent(component.id)}
+                    onClick={() => navigateToComponent(safeComponent.id)}
                     hoverStyle={{ fill: "#F0F0F0" }}
                     cornerRadius={16}
                   >
@@ -1238,7 +1278,7 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
                 )}
               </AutoLayout>
               
-              {isExpanded && component.hasUnboundProperties && (
+              {isExpanded && safeComponent.hasUnboundProperties && (
                 <AutoLayout 
                   direction="vertical" 
                   spacing={0} 
@@ -1246,8 +1286,8 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
                   fill={index % 2 === 0 ? "#FFFFFF" : "#FAFAFA"}
                   width="fill-parent"
                 >
-                  {component.unboundProperties && component.unboundProperties.length > 0 ? (
-                    <UnboundPropertiesDetail properties={component.unboundProperties} />
+                  {safeComponent.unboundProperties && safeComponent.unboundProperties.length > 0 ? (
+                    <UnboundPropertiesDetail properties={safeComponent.unboundProperties} />
                   ) : (
                     <Text fontSize={11} fill="#666">No unbound properties found</Text>
                   )}
@@ -1256,10 +1296,10 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
             </AutoLayout>
           )
           } catch (error) {
-            console.error('Error rendering component:', component.id, error)
+            console.error('Error rendering component:', safeComponent?.id || 'unknown', error)
             return (
-              <AutoLayout key={component.id} direction="vertical" spacing={4} padding={8} fill="#FFEBEE" cornerRadius={4} width="fill-parent">
-                <Text fontSize={11} fill="#C62828">Error rendering component: {component.name}</Text>
+              <AutoLayout key={`error-${index}`} direction="vertical" spacing={4} padding={8} fill="#FFEBEE" cornerRadius={4} width="fill-parent">
+                <Text fontSize={11} fill="#C62828">Error rendering component: {safeText(safeComponent?.name)}</Text>
               </AutoLayout>
             )
           }
@@ -1273,14 +1313,14 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
     verticalAlignItems="center"
     width="fill-parent"
             fill="#fff"
-    onClick={() => loadMoreComponents(components[0].pageName)}
+    onClick={() => loadMoreComponents(safeText(validComponents[0]?.pageName))}
             hoverStyle={{ fill: "#f0f0f0" }}
   >
             <Text fontSize={11} fill="#222" fontWeight={600}>
-              {`Load more (${(components.length - displayedCount).toString()} remaining)`}
+              {`Load more (${safeText(validComponents.length - displayedCount)} remaining)`}
     </Text>
             <Text fontSize={11} fill="#222">
-      {`Showing ${displayedCount.toString()} of ${components.length.toString()}`}
+      {`Showing ${safeText(displayedCount)} of ${safeText(validComponents.length)}`}
     </Text>
   </AutoLayout>
 )}
@@ -1294,9 +1334,15 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
   
   pageData.components.forEach(component => {
     if (component.componentSetName) {
-      componentSets.add(component.componentSetName)
+      const safeName = safeText(component.componentSetName)
+      if (safeName !== 'N/A') {
+        componentSets.add(safeName)
+      }
     } else {
-      regularComponents.add(component.name)
+      const safeName = safeText(component.name)
+      if (safeName !== 'N/A') {
+        regularComponents.add(safeName)
+      }
     }
   })
 
@@ -1330,18 +1376,18 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
         )}
         <AutoLayout direction="vertical" spacing={2} width="fill-parent">
             <Text fontSize={11} fontWeight={700}>
-              {pageData.pageName}
+              {safeText(pageData.pageName)}
             </Text>
           <AutoLayout direction="horizontal" spacing={12}>
               <Text fontSize={11} fill="#333333">
-                {`${stats.total.toString()} ${stats.total === 1 ? 'variant' : 'variants'} (${stats.unique.toString()} ${stats.unique === 1 ? 'component' : 'components'})`}
+                {`${safeText(stats.total)} ${stats.total === 1 ? 'variant' : 'variants'} (${safeText(stats.unique)} ${stats.unique === 1 ? 'component' : 'components'})`}
             </Text>
             </AutoLayout>
             <AutoLayout direction="horizontal" spacing={12}>
-              <Text fontSize={11} fill="#000" fontWeight={400}>{`Description: ${stats.withDescription.toString()}`}</Text>
-              <Text fontSize={11} fill="#000" fontWeight={400}>{`Docs link: ${stats.withDocumentationLink.toString()}`}</Text>
-              <Text fontSize={11} fill="#000" fontWeight={400}>{`Unbound values: ${stats.withUnboundProperties.toString()}`}</Text>
-              <Text fontSize={11} fill="#000" fontWeight={400}>{`Hidden from publishing: ${stats.hidden.toString()}`}</Text>
+              <Text fontSize={11} fill="#000" fontWeight={400}>{`Description: ${safeText(stats.withDescription)}`}</Text>
+              <Text fontSize={11} fill="#000" fontWeight={400}>{`Docs link: ${safeText(stats.withDocumentationLink)}`}</Text>
+              <Text fontSize={11} fill="#000" fontWeight={400}>{`Unbound values: ${safeText(stats.withUnboundProperties)}`}</Text>
+              <Text fontSize={11} fill="#000" fontWeight={400}>{`Hidden from publishing: ${safeText(stats.hidden)}`}</Text>
           </AutoLayout>
         </AutoLayout>
       </AutoLayout>
@@ -1389,7 +1435,7 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
           })}
           hoverStyle={{ fill: "#EFC8FD" }}
         >
-          <Text fontSize={10} fill="#8C00BA">{`Load all (${totalCount.toString()}) (Figma may crash!)`}</Text>
+          <Text fontSize={10} fill="#8C00BA">{`Load all (${safeText(totalCount)}) (Figma may crash!)`}</Text>
         </AutoLayout>
         
         {currentCount < totalCount && (
@@ -1403,13 +1449,160 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
             })}
             hoverStyle={{ fill: "#EFC8FD" }}
           >
-            <Text fontSize={10} fill="#8C00BA">{`Reset to ${CHUNK_SIZE.toString()}`}</Text>
+            <Text fontSize={10} fill="#8C00BA">{`Reset to ${safeText(CHUNK_SIZE)}`}</Text>
           </AutoLayout>
         )}
       </AutoLayout>
     )
   }
 
+  const runDeepScanWithScope = async (scanCurrentPageOnly: boolean) => {
+    setIsDeepScanning(true)
+    setAuditData([])
+    setPageProgress([])
+    setExpandedPages([])
+    setExpandedComponents([])
+    setPageDisplayCounts({})
+    
+    try {
+      if (scanCurrentPageOnly) {
+        setCurrentProgress('Deep scanning current page...')
+        const currentPage = figma.currentPage
+        const safeCurrentPageName = (currentPage.name || '').trim() || 'Current Page'
+        
+        setPageProgress([{
+          name: safeCurrentPageName,
+          status: 'loading',
+          componentCount: 0
+        }])
+
+        const pageComponents = processPageComponents(currentPage)
+        
+        setPageProgress([{
+          name: safeCurrentPageName,
+          status: 'complete',
+          componentCount: pageComponents.length
+        }])
+
+        // Clean and serialize the data before storing
+        try {
+          const cleanedComponents = cleanComponentData(pageComponents)
+          setAuditData(cleanedComponents)
+        } catch (dataError) {
+          console.error(`Error setting audit data for current page:`, dataError)
+          setAuditData([]) // Fallback to empty array
+        }
+        
+        setExpandedPages([safeCurrentPageName])
+        setPageDisplayCounts({ [safeCurrentPageName]: CHUNK_SIZE })
+        setCurrentProgress(`Deep scan complete: Found ${pageComponents.length} components`)
+        
+      } else {
+        setCurrentProgress('Deep scanning all pages...')
+        
+        await figma.loadAllPagesAsync()
+        const allPages = figma.root.children.filter(child => child.type === 'PAGE') as PageNode[]
+        
+        const initialProgress: PageProgress[] = allPages.map((page, index) => ({
+          name: (page.name || '').trim() || `Page ${index + 1}`,
+          status: 'pending' as const,
+          componentCount: 0
+        }))
+        setPageProgress(initialProgress)
+
+        let allComponents: ComponentAuditData[] = []
+        
+        for (let i = 0; i < allPages.length; i++) {
+          const page = allPages[i]
+          const safePage = {
+            ...page,
+            name: (page.name || '').trim() || `Page ${i + 1}`
+          }
+          
+          try {
+            setCurrentProgress(`Deep scanning page ${i + 1}/${allPages.length}: ${safePage.name}`)
+            setPageProgress(prev => prev.map(p => 
+              p.name === safePage.name 
+                ? { ...p, status: 'loading' }
+                : p
+            ))
+
+            const pageComponents = processPageComponents(page)
+            allComponents = [...allComponents, ...pageComponents]
+            
+            setPageProgress(prev => prev.map(p => 
+              p.name === safePage.name 
+                ? { ...p, status: 'complete', componentCount: pageComponents.length }
+                : p
+            ))
+
+            // Clean and serialize the data before storing
+            try {
+              const cleanedComponents = cleanComponentData(allComponents)
+              setAuditData(cleanedComponents)
+            } catch (dataError) {
+              console.error(`Error setting audit data for page ${safePage.name}:`, dataError)
+              // Continue without updating audit data for this page
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, 200))
+            
+          } catch (error) {
+            console.error(`Error processing page ${safePage.name}:`, error)
+            setPageProgress(prev => prev.map(p => 
+              p.name === safePage.name 
+                ? { ...p, status: 'error', componentCount: 0 }
+                : p
+            ))
+          }
+        }
+
+        setCurrentProgress(`Deep scan complete! Found ${allComponents.length} components across ${allPages.length} pages`)
+      }
+
+      setLastScanTime(new Date().toUTCString())
+      
+      // Auto-collapse the progress accordion after scan completes
+      setTimeout(() => {
+        setIsProgressExpanded(false)
+      }, 1000)
+        
+    } catch (error) {
+      console.error('Error during deep scan:', error)
+      setCurrentProgress('Error occurred during deep scan')
+    } finally {
+      setIsDeepScanning(false)
+      setTimeout(() => {
+        setCurrentProgress('')
+        setPageProgress([])
+      }, 3000)
+    }
+  }
+
+  const runDeepScanCurrentPage = async () => {
+    setCurrentPageOnly(true)
+    await runDeepScanWithScope(true)
+  }
+
+  const runDeepScanAllPages = async () => {
+    try {
+      // Step 1: Run quick scan first to ensure proper initialization
+      setCurrentProgress('Initializing: Running quick scan...')
+      await runQuickScan()
+      
+      // Wait a moment for quick scan to complete
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      // Step 2: Now run the deep scan
+      setCurrentProgress('Starting deep scan of all pages...')
+      setCurrentPageOnly(false)
+      await runDeepScanWithScope(false)
+    } catch (error) {
+      console.error('Error in deep scan all pages:', error)
+      setCurrentProgress('Error occurred during scan')
+      setIsDeepScanning(false)
+    }
+  }
 
 
   return (
@@ -1420,9 +1613,9 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
             <Text fontSize={12} fontWeight={700}>🔍</Text>
             <Text fontSize={16} fontWeight={700}>Component audit</Text>
           </AutoLayout>
-          {!quickScanData && !isQuickScanning && (
+          {!isQuickScanning && !isDeepScanning && auditData.length === 0 && (
             <Text fontSize={12} fill="#333" horizontalAlignText="center">
-              Start with a quick scan to generate an overview of your components.
+              Choose a scan type to analyze your components.
             </Text>
           )}
       </AutoLayout>
@@ -1441,101 +1634,90 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
         )}
       </AutoLayout>
 
-    {/* Quick Scan Section */}
-    {!quickScanData && !isQuickScanning && (
-      <AutoLayout direction="vertical" spacing={8} width="fill-parent">
-        <AutoLayout 
-          fill="#EFBEFF"
-          cornerRadius={8} 
-          padding={{ vertical: 6, horizontal: 10 }} 
-          stroke="#E498FF"
-          strokeWidth={1}
-          onClick={runQuickScan}  // Changed from createSummaryFrame to runQuickScan
-          hoverStyle={{ fill: "#FCF5FF", stroke: "#8C00BA" }}
-          horizontalAlignItems="center"
-          width="hug-contents"
-        >
-          <Text fontSize={12} fill="#69008C" fontWeight={600}>
-            {isQuickScanning ? "Quick Scanning..." : "Quick Scan"}
-          </Text>
+    {/* Scan Options - Show all three when no scan is active or completed */}
+    {!isQuickScanning && !isDeepScanning && auditData.length === 0 && (
+      <AutoLayout direction="vertical" spacing={12} width="fill-parent">
+        <AutoLayout direction="vertical" spacing={8} width="fill-parent">
+          <Text fontSize={14} fontWeight={600}>Scan Options</Text>
+          
+          {/* Quick Scan Option */}
+          <AutoLayout direction="vertical" spacing={8} padding={12} fill="#FAECFF" cornerRadius={16} width="fill-parent">
+            <AutoLayout direction="vertical" spacing={4} width="fill-parent">
+              <Text fontSize={12} fontWeight={600} fill="#8C00BA">🚀 Quick Scan</Text>
+              <Text fontSize={11} fill="#8C00BA" width="fill-parent">
+                Fast overview of all components across your document. Shows counts, missing descriptions, and documentation links.
+              </Text>
+            </AutoLayout>
+            <AutoLayout 
+              fill="#EFBEFF"
+              cornerRadius={8} 
+              padding={{ vertical: 6, horizontal: 10 }} 
+              stroke="#E498FF"
+              strokeWidth={1}
+              onClick={runQuickScan}
+              hoverStyle={{ fill: "#FCF5FF", stroke: "#8C00BA" }}
+              width="hug-contents"
+            >
+              <Text fontSize={12} fill="#69008C" fontWeight={600}>Start Quick Scan</Text>
+            </AutoLayout>
+          </AutoLayout>
+
+          {/* Current Page Deep Scan Option */}
+          <AutoLayout direction="vertical" spacing={8} padding={12} fill="#F0F8FF" cornerRadius={16} width="fill-parent">
+            <AutoLayout direction="vertical" spacing={4} width="fill-parent">
+              <Text fontSize={12} fontWeight={600} fill="#1976D2">📄 Scan Current Page</Text>
+              <Text fontSize={11} fill="#1976D2" width="fill-parent">
+                Detailed analysis of components on the current page only. Includes unbound properties analysis.
+              </Text>
+            </AutoLayout>
+            <AutoLayout 
+              fill="#E3F2FD"
+              cornerRadius={8} 
+              padding={{ vertical: 6, horizontal: 10 }} 
+              stroke="#BBDEFB"
+              strokeWidth={1}
+              onClick={runDeepScanCurrentPage}
+              hoverStyle={{ fill: "#F3E5F5", stroke: "#1976D2" }}
+              width="hug-contents"
+            >
+              <Text fontSize={12} fill="#1565C0" fontWeight={600}>Scan Current Page</Text>
+            </AutoLayout>
+          </AutoLayout>
+
+          {/* All Pages Deep Scan Option */}
+          <AutoLayout direction="vertical" spacing={8} padding={12} fill="#FFF3CD" cornerRadius={16} width="fill-parent">
+            <AutoLayout direction="vertical" spacing={4} width="fill-parent">
+              <Text fontSize={12} fontWeight={600} fill="#856404">📚 Scan Entire Document</Text>
+              <Text fontSize={11} fill="#856404" width="fill-parent">
+                Complete analysis of all components across every page. May be slow and could crash Figma with large documents.
+              </Text>
+            </AutoLayout>
+            <AutoLayout 
+              fill="#FFF8E1"
+              cornerRadius={8} 
+              padding={{ vertical: 6, horizontal: 10 }} 
+              stroke="#FFE082"
+              strokeWidth={1}
+              onClick={runDeepScanAllPages}
+              hoverStyle={{ fill: "#FFFDE7", stroke: "#856404" }}
+              width="hug-contents"
+            >
+              <Text fontSize={12} fill="#6F4F00" fontWeight={600}>Scan Entire Document</Text>
+            </AutoLayout>
+          </AutoLayout>
         </AutoLayout>
       </AutoLayout>
     )}
 
       {/* Progress for quick scan */}
-      {isQuickScanning && currentProgress && (
+      {isQuickScanning && currentProgress && currentProgress.trim() && (
         <AutoLayout direction="vertical" spacing={8} padding={12} fill="#F0F8FF" cornerRadius={16} width="fill-parent">
-          <Text fontSize={12} fontWeight={600}>{currentProgress}</Text>
+          <Text fontSize={12} fontWeight={600}>{currentProgress.trim()}</Text>
         </AutoLayout>
       )}
 
       {/* Quick Scan Results */}
       <QuickScanResults />
-
-      {/* Deep Scan Section */}
-      {quickScanData && !isDeepScanning && auditData.length === 0 && (
-        <>
-          <AutoLayout direction="vertical" spacing={4} width="fill-parent">
-            <Text fontSize={14} fontWeight={600}>Full analysis</Text>
-            <Text fontSize={12} fill="#333333">
-              Generate detailed information including unbound properties.
-            </Text>
-          </AutoLayout>
-
-          <AutoLayout direction="vertical" cornerRadius={16} spacing={8} padding={12} fill="#FFF3CD" width="fill-parent">
-              <Text fontSize={12} fill="#856404" fontWeight={600}>
-                ⚠️ Performance Warning
-              </Text>
-              <Text fontSize={11} fill="#856404" width="fill-parent">
-                If you have a lot of pages, analysing every page might crash Figma. It's recommended to do this on a page-by-page basis for best performance.
-              </Text>
-            </AutoLayout>          
-          
-          <AutoLayout direction="horizontal" spacing={8} verticalAlignItems="center" width="fill-parent">
-            <AutoLayout direction="horizontal" verticalAlignItems="center" stroke="#eee" cornerRadius={16} padding={2}>
-              <AutoLayout
-                cornerRadius={16}
-                fill={currentPageOnly ? "#FAECFF" : ""} 
-                horizontalAlignItems="center"
-                strokeWidth={1}
-            padding={{ vertical: 6, horizontal: 8 }} 
-          onClick={toggleScanScope}
-        >
-                <Text fontSize={11} fill={"#8C00BA"} >
-                  Current page
-                  </Text>
-        </AutoLayout>
-        <AutoLayout 
-                cornerRadius={16} 
-                fill={currentPageOnly ? "" : "#FAECFF"} 
-                horizontalAlignItems="center"
-          strokeWidth={1}
-            padding={{ vertical: 6, horizontal: 8 }}
-          onClick={toggleScanScope}
-        >
-                <Text fontSize={11} fill={"#8C00BA"}>
-                  All pages
-                  </Text>
-        </AutoLayout>
-      </AutoLayout>
-  
-            <AutoLayout 
-              cornerRadius={8}
-              fill="#EFBEFF"
-              padding={{ vertical: 6, horizontal: 10 }} 
-              stroke="#E498FF"
-              strokeWidth={1}
-              onClick={runDeepScan}
-              hoverStyle={{ fill: "#FCF5FF", stroke: "#8C00BA" }}
-              horizontalAlignItems="center"
-            >
-              <Text fontSize={12} fill="#69008C" fontWeight={600}>
-                Deep scan ({currentPageOnly ? 'current page' : 'all pages'})
-              </Text>
-            </AutoLayout>
-          </AutoLayout>
-        </>
-      )}
 
             {/* Deep Scan Results */}
       {auditData.length > 0 && (
@@ -1547,7 +1729,7 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
             <AutoLayout width="fill-parent">
               {lastScanTime && (
                 <Text fontSize={11} fill="#333333">
-                  {`Scanned: ${lastScanTime} (${currentPageOnly ? 'current page' : 'all pages'})`}
+                  {`Scanned: ${safeText(lastScanTime)} (${currentPageOnly ? 'current page' : 'all pages'})`}
         </Text>
       )}
             </AutoLayout>
@@ -1582,13 +1764,13 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
   
                     {/* Page Accordions */}
           <AutoLayout direction="vertical" spacing={8} width="fill-parent">
-      {getPageData().map((pageData, index) => (
-        <AutoLayout key={pageData.pageName} direction="vertical" spacing={8} width="fill-parent">
+      {(getPageData() || []).map((pageData, index) => (
+        <AutoLayout key={`${safeText(pageData.pageName)}-${index}`} direction="vertical" spacing={8} width="fill-parent">
           <PageAccordion pageData={pageData} />
           {pageData.isExpanded && (
             <LoadAllButton 
-              pageName={pageData.pageName} 
-              totalCount={pageData.components.length} 
+              pageName={safeText(pageData.pageName)} 
+              totalCount={pageData.components?.length || 0} 
             />
           )}
         </AutoLayout>
