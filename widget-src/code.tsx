@@ -1047,7 +1047,11 @@ const navigateToComponent = async (componentId: string) => {
     )
   }
 
-  const UnboundPropertiesDetail = ({ properties }: { properties: UnboundProperty[] }) => {
+  const UnboundPropertiesDetail = ({ properties, componentId, isOnCurrentPage }: { 
+    properties: UnboundProperty[], 
+    componentId: string, 
+    isOnCurrentPage: boolean 
+  }) => {
     try {
       if (!properties || properties.length === 0) return null
 
@@ -1090,26 +1094,45 @@ const navigateToComponent = async (componentId: string) => {
                   key={`${safeText(type)}-${index}-${safeProperty}`} 
                   direction="vertical" 
                   spacing={4} 
-                    padding={{ top: 8, right: 16, bottom: 8, left: 16 }} 
-                    fill="#FFF2F2" 
-                    cornerRadius={8} 
-                    stroke="#FFD6D6"
+                  padding={{ top: 8, right: 16, bottom: 8, left: 16 }} 
+                  fill="#FFF2F2" 
+                  cornerRadius={8} 
+                  stroke="#FFD6D6"
                   width="fill-parent"
-                  >
-                  {safeNodePath !== 'N/A' && (
-                      <Text 
-                        fontSize={11} 
-                        fontWeight={600} 
-                        fill="#6A0000" 
-                        width="fill-parent"
-                      >
-                        {safeNodePath}
-                      </Text>
-                  )}
-                    <AutoLayout direction="horizontal" spacing={8} width="fill-parent">
-                      <Text fontSize={11} fill="#6A0000" width={160}>{safeProperty}:</Text>
-                      <Text fontSize={11} fill="#6A0000">{safeCurrentValue}</Text>
+                  onClick={isOnCurrentPage ? () => navigateToComponent(componentId) : undefined}
+                  hoverStyle={isOnCurrentPage ? { 
+                    fill: "#FFE5E5", 
+                    stroke: "#FFC1C1" 
+                  } : undefined}
+                >
+                  <AutoLayout direction="horizontal" spacing={8} width="fill-parent" verticalAlignItems="center">
+                    <AutoLayout direction="vertical" spacing={4} width="fill-parent">
+                      {safeNodePath !== 'N/A' && (
+                        <Text 
+                          fontSize={11} 
+                          fontWeight={600} 
+                          fill="#6A0000" 
+                          width="fill-parent"
+                        >
+                          {safeNodePath}
+                        </Text>
+                      )}
+                      <AutoLayout direction="horizontal" spacing={8} width="fill-parent">
+                        <Text fontSize={11} fill="#6A0000" width={160}>{safeProperty}:</Text>
+                        <Text fontSize={11} fill="#6A0000">{safeCurrentValue}</Text>
+                      </AutoLayout>
+                      {isOnCurrentPage && (
+                        <Text fontSize={10} fill="#999999" opacity={0.8}>
+                          Click to navigate to component
+                        </Text>
+                      )}
                     </AutoLayout>
+                    {isOnCurrentPage && (
+                      <AutoLayout width={20} height={20} horizontalAlignItems="center" verticalAlignItems="center">
+                        <ExternalLinkIcon color="#6A0000" size={12} />
+                      </AutoLayout>
+                    )}
+                  </AutoLayout>
                 </AutoLayout>
               )
             })}
@@ -1339,7 +1362,11 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
                   width="fill-parent"
                 >
                   {safeComponent.unboundProperties && safeComponent.unboundProperties.length > 0 ? (
-                    <UnboundPropertiesDetail properties={safeComponent.unboundProperties} />
+                    <UnboundPropertiesDetail 
+                      properties={safeComponent.unboundProperties} 
+                      componentId={safeComponent.id}
+                      isOnCurrentPage={safeComponent.isOnCurrentPage}
+                    />
                   ) : (
                     <Text fontSize={11} fill="#666">No unbound properties found</Text>
                   )}
