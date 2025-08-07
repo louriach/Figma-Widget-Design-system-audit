@@ -829,8 +829,17 @@ const navigateToComponent = async (componentId: string) => {
       await figma.loadAllPagesAsync()
     }
     const component = await figma.getNodeByIdAsync(componentId)
-    if (component) {
-      figma.viewport.scrollAndZoomIntoView([component])
+    if (component && 'x' in component) {
+      // Select the component (only SceneNodes can be selected)
+      figma.currentPage.selection = [component as SceneNode]
+      
+      // Navigate to the component with comfortable zoom
+      figma.viewport.scrollAndZoomIntoView([component as SceneNode])
+      
+      // Show notification with component name and return instruction
+      figma.notify(`${safeText(component.name)} • Double-click widget layer to return`, {
+        timeout: 60000
+      })
     }
   } catch (error) {
     console.error('Error navigating to component:', error)
@@ -1121,11 +1130,6 @@ const navigateToComponent = async (componentId: string) => {
                         <Text fontSize={11} fill="#6A0000" width={160}>{safeProperty}:</Text>
                         <Text fontSize={11} fill="#6A0000">{safeCurrentValue}</Text>
                       </AutoLayout>
-                      {isOnCurrentPage && (
-                        <Text fontSize={10} fill="#999999" opacity={0.8}>
-                          Click to navigate to component
-                        </Text>
-                      )}
                     </AutoLayout>
                     {isOnCurrentPage && (
                       <AutoLayout width={20} height={20} horizontalAlignItems="center" verticalAlignItems="center">
