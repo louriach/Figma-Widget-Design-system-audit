@@ -24,6 +24,7 @@ interface UnboundProperty {
   property: string
   currentValue?: string
   nodePath?: string
+  nodeId?: string  // Store the actual node ID for direct navigation
 }
 
 interface ComponentAuditData {
@@ -210,7 +211,8 @@ function Widget() {
                 type: 'fill',
                 property: fills.length > 1 ? `Fill ${index + 1}` : 'Fill',
                 currentValue: safeText(formatColor(fill.color)),
-                nodePath: safeText(currentPath)
+                nodePath: safeText(currentPath),
+                nodeId: node.id
               });
             }
           }
@@ -236,7 +238,8 @@ function Widget() {
                 type: 'stroke',
                   property: visibleStrokes.length > 1 ? `Stroke ${index + 1}` : 'Stroke',
                 currentValue: safeText(formatColor(stroke.color)),
-                nodePath: safeText(currentPath)
+                nodePath: safeText(currentPath),
+                nodeId: node.id
                 });
             }
           }
@@ -261,7 +264,8 @@ function Widget() {
               type: 'text',
               property: 'Font Family',
               currentValue: safeText(fontFamilyValue),
-              nodePath: safeText(currentPath)
+              nodePath: safeText(currentPath),
+              nodeId: node.id
             });
           }
           
@@ -272,7 +276,8 @@ function Widget() {
               type: 'text',
               property: 'Font Size',
               currentValue: safeText(fontSizeValue),
-              nodePath: safeText(currentPath)
+              nodePath: safeText(currentPath),
+              nodeId: node.id
             });
           }
           
@@ -299,7 +304,8 @@ function Widget() {
                 type: 'text',
                 property: 'Line Height',
                 currentValue: safeText(lineHeightValue),
-                nodePath: safeText(currentPath)
+                nodePath: safeText(currentPath),
+                nodeId: node.id
               });
             }
           }
@@ -316,7 +322,8 @@ function Widget() {
               type: 'cornerRadius',
               property: 'Corner Radius',
               currentValue: safeText(`${node.cornerRadius}px`),
-              nodePath: safeText(currentPath)
+              nodePath: safeText(currentPath),
+              nodeId: node.id
             });
           }
         }
@@ -327,18 +334,24 @@ function Widget() {
         
         if ('layoutMode' in layoutNode && layoutNode.layoutMode !== 'NONE') {
           // Check for hardcoded itemSpacing values
-          // Note: Figma's "auto" spacing typically resolves to 10px, so we treat 10px as acceptable
-          if ('itemSpacing' in layoutNode && layoutNode.itemSpacing > 0 && layoutNode.itemSpacing !== 10) {
-            const hasItemSpacingVar = layoutNode.boundVariables && 
-                                     layoutNode.boundVariables.itemSpacing !== undefined;
-            
-            if (!hasItemSpacingVar) {
-              unboundProperties.push({
-                type: 'spacing',
-                property: 'Item Spacing',
-                currentValue: safeText(`${layoutNode.itemSpacing}px`),
-                nodePath: safeText(currentPath)
-              });
+          // Skip spacing checks if primaryAxisAlignItems is 'SPACE_BETWEEN' (indicates "auto" spacing)
+          const isAutoSpacing = layoutNode.primaryAxisAlignItems === 'SPACE_BETWEEN';
+          
+          if ('itemSpacing' in layoutNode && layoutNode.itemSpacing > 0 && !isAutoSpacing) {
+            // Flag non-10px values without variables (10px = Figma's default "auto" value)
+            if (layoutNode.itemSpacing !== 10) {
+              const hasItemSpacingVar = layoutNode.boundVariables && 
+                                       layoutNode.boundVariables.itemSpacing !== undefined;
+              
+              if (!hasItemSpacingVar) {
+                unboundProperties.push({
+                  type: 'spacing',
+                  property: 'Item Spacing',
+                  currentValue: safeText(`${layoutNode.itemSpacing}px`),
+                  nodePath: safeText(currentPath),
+                  nodeId: node.id
+                });
+              }
             }
           }
 
@@ -359,7 +372,8 @@ function Widget() {
                     type: 'spacing',
                     property: padding.name,
                     currentValue: safeText(`${padding.value}px`),
-                    nodePath: safeText(currentPath)
+                    nodePath: safeText(currentPath),
+                    nodeId: node.id
                   });
                 }
               }
@@ -376,12 +390,13 @@ function Widget() {
         if (!hasEffectStyle) {
           node.effects.forEach((effect, index) => {
             if (effect.visible !== false) {
-              unboundProperties.push({
-                type: 'effect',
-                property: node.effects.length > 1 ? `Effect ${index + 1} (${effect.type})` : `Effect (${effect.type})`,
-                currentValue: safeText(effect.type),
-                nodePath: safeText(currentPath)
-              });
+                          unboundProperties.push({
+              type: 'effect',
+              property: node.effects.length > 1 ? `Effect ${index + 1} (${effect.type})` : `Effect (${effect.type})`,
+              currentValue: safeText(effect.type),
+              nodePath: safeText(currentPath),
+              nodeId: node.id
+            });
             }
           });
         }
@@ -408,7 +423,8 @@ function Widget() {
             type: 'stroke',
             property: 'Stroke Weight',
             currentValue: safeText(`${node.strokeWeight}px`),
-            nodePath: safeText(currentPath)
+            nodePath: safeText(currentPath),
+            nodeId: node.id
             });
           }
         }
@@ -823,26 +839,32 @@ function Widget() {
     }
   }
 
-const navigateToComponent = async (componentId: string) => {
+const navigateToComponent = async (componentId: string, specificNodeId?: string) => {
   try {
     if (!currentPageOnly) {
       await figma.loadAllPagesAsync()
     }
-    const component = await figma.getNodeByIdAsync(componentId)
-    if (component && 'x' in component) {
-      // Select the component (only SceneNodes can be selected)
-      figma.currentPage.selection = [component as SceneNode]
+    
+    // If we have a specific node ID, try to navigate to that node instead
+    const targetNodeId = specificNodeId || componentId
+    const targetNode = await figma.getNodeByIdAsync(targetNodeId)
+    
+    if (targetNode && 'x' in targetNode) {
+      // Select the specific node (only SceneNodes can be selected)
+      figma.currentPage.selection = [targetNode as SceneNode]
       
-      // Navigate to the component with comfortable zoom
-      figma.viewport.scrollAndZoomIntoView([component as SceneNode])
+      // Navigate to the specific node with comfortable zoom
+      figma.viewport.scrollAndZoomIntoView([targetNode as SceneNode])
       
-      // Show notification with component name and return instruction
-      figma.notify(`${safeText(component.name)} • Double-click widget layer to return`, {
+      // Show notification with node name and return instruction
+      const nodeName = specificNodeId ? targetNode.name : safeText(targetNode.name)
+      figma.notify(`${safeText(nodeName)} • Double-click widget layer to return`, {
         timeout: 60000
       })
     }
   } catch (error) {
-    console.error('Error navigating to component:', error)
+    console.error('Error navigating to node:', error)
+    figma.notify('Could not navigate to node')
   }
 }
 
@@ -877,7 +899,8 @@ const navigateToComponent = async (componentId: string) => {
               type: prop.type || 'unknown',
               property: (prop.property || '').trim() || 'Unknown Property',
               currentValue: (prop.currentValue || '').trim() || 'N/A',
-              nodePath: (prop.nodePath || '').trim() || 'Unknown Path'
+              nodePath: (prop.nodePath || '').trim() || 'Unknown Path',
+              nodeId: (prop.nodeId || '').trim() || undefined
             })) || [],
             // Ensure other optional properties have proper values
             componentSetName: component.componentSetName ? 
@@ -1097,6 +1120,7 @@ const navigateToComponent = async (componentId: string) => {
               const safeProperty = safeText(prop.property)
               const safeCurrentValue = safeText(prop.currentValue)
               const safeNodePath = safeText(prop.nodePath)
+              const targetNodeId = prop.nodeId || componentId  // Use specific node ID if available
               
               return (
                 <AutoLayout 
@@ -1108,7 +1132,7 @@ const navigateToComponent = async (componentId: string) => {
                   cornerRadius={8} 
                   stroke="#FFD6D6"
                   width="fill-parent"
-                  onClick={isOnCurrentPage ? () => navigateToComponent(componentId) : undefined}
+                  onClick={isOnCurrentPage ? () => navigateToComponent(componentId, targetNodeId) : undefined}
                   hoverStyle={isOnCurrentPage ? { 
                     fill: "#FFE5E5", 
                     stroke: "#FFC1C1" 
