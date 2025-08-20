@@ -1298,11 +1298,12 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
                     direction="vertical" 
                     spacing={2} 
                     width="fill-parent"
-                    onClick={() => navigateToComponent(safeComponent.id)}
+                    onClick={safeComponent.isOnCurrentPage ? () => navigateToComponent(safeComponent.id) : undefined}
+                    hoverStyle={safeComponent.isOnCurrentPage ? { opacity: 0.8 } : undefined}
                   >
                     {safeComponent.componentSetName ? (
                       <>
-                        <Text fontSize={11} fill="#1976D2" fontWeight={600} width="fill-parent">
+                        <Text fontSize={11} fill={safeComponent.isOnCurrentPage ? "#1976D2" : "#000000"} fontWeight={600} width="fill-parent">
                           {safeText(safeComponent.componentSetName)}
                         </Text>
                         {safeComponent.variantProperties && (
@@ -1324,7 +1325,7 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
                       </>
                     ) : (
                       <>
-                        <Text fontSize={11} fill="#1976D2" fontWeight={600} width={"fill-parent"}>
+                        <Text fontSize={11} fill={safeComponent.isOnCurrentPage ? "#1976D2" : "#000000"} fontWeight={600} width={"fill-parent"}>
                           {safeText(safeComponent.name)}
                         </Text>
                         {safeComponent.isHiddenFromPublishing && (
