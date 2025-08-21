@@ -39,6 +39,9 @@ interface ComponentAuditData {
   unboundProperties: UnboundProperty[]
   isHiddenFromPublishing: boolean
   isOnCurrentPage: boolean
+  isComponentSet?: boolean  // True if this represents the component set itself
+  isVariant?: boolean       // True if this is a variant within a component set
+  hasExpandableContent?: boolean  // True if component set has variants with unbound properties, or individual component has unbound properties
 }
 
 interface PageProgress {
@@ -145,6 +148,49 @@ const EntireDocumentIcon = ({ color = "#F57C00", size = 20 }: { color?: string, 
       <path d="M7 12h10"/>
       <path d="M7 16h6"/>
     </svg>`}
+  />
+)
+
+// Component Set Icon (Dashed border frame with center diamond)
+const ComponentSetIcon = ({ color = "#000000", size = 16 }: { color?: string, size?: number }) => (
+  <SVG 
+    src={`<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_17_5465)">
+<path d="M1 14C1 14.5523 1.44772 15 2 15H3.5V16H2C0.895431 16 0 15.1046 0 14V12.5H1V14Z" fill="${color}"/>
+<path d="M9.5 16H6.5V15H9.5V16Z" fill="${color}"/>
+<path d="M16 14C16 15.1046 15.1046 16 14 16H12.5V15H14C14.5523 15 15 14.5523 15 14V12.5H16V14Z" fill="${color}"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M7.5 8.60254C7.77597 8.32655 8.22403 8.32655 8.5 8.60254L9.66992 9.77344C9.94584 10.0494 9.94589 10.4965 9.66992 10.7725L8.5 11.9434C8.22406 12.2193 7.77597 12.2193 7.5 11.9434L6.33008 10.7725C6.05411 10.4965 6.05412 10.0494 6.33008 9.77344L7.5 8.60254ZM6.88379 10.2725L8 11.3887L9.11523 10.2725L8 9.15625L6.88379 10.2725ZM9.27344 10.2314C9.27872 10.2446 9.2812 10.2585 9.28125 10.2725C9.28118 10.2441 9.27068 10.216 9.24902 10.1943L9.27344 10.2314ZM6.36426 9.96582C6.32346 10.0276 6.2968 10.0958 6.2832 10.166C6.30364 10.0609 6.35414 9.96031 6.43555 9.87891L6.36426 9.96582Z" fill="${color}"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M5.22754 6.33008C5.5035 6.05411 5.95059 6.05412 6.22656 6.33008L7.39746 7.5C7.67327 7.77587 7.67311 8.22305 7.39746 8.49902L6.22656 9.66992C5.95062 9.94583 5.50351 9.94579 5.22754 9.66992L4.05664 8.5C3.78068 8.22404 3.78068 7.77596 4.05664 7.5L5.22754 6.33008ZM5.76855 9.27344C5.75511 9.27886 5.74084 9.2813 5.72656 9.28125C5.75529 9.28143 5.78374 9.27094 5.80566 9.24902L5.76855 9.27344ZM4.61133 8L5.72656 9.11523L6.84277 8L5.72656 6.88379L4.61133 8ZM6.0332 6.36426C6.06419 6.38468 6.09382 6.40828 6.12109 6.43555C6.06669 6.38114 6.00363 6.34062 5.93652 6.31348L6.0332 6.36426Z" fill="${color}"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M9.77344 6.33008C10.0494 6.05413 10.4965 6.05412 10.7725 6.33008L11.9434 7.5C12.2192 7.77597 12.2193 8.22406 11.9434 8.5L10.7725 9.66992C10.4965 9.94583 10.0494 9.94578 9.77344 9.66992L8.60254 8.5C8.32661 8.22404 8.32661 7.77596 8.60254 7.5L9.77344 6.33008ZM10.2305 9.27344C10.2439 9.27896 10.2581 9.28219 10.2725 9.28223C10.2442 9.28211 10.216 9.2706 10.1943 9.24902L10.2305 9.27344ZM9.15625 8L10.2725 9.11523L11.3887 8L10.2725 6.88379L9.15625 8ZM10.166 6.2832C10.0608 6.30357 9.96037 6.3541 9.87891 6.43555L9.9668 6.36426C10.0283 6.3237 10.0961 6.29679 10.166 6.2832Z" fill="${color}"/>
+<path d="M1 9.5H0V6.5H1V9.5Z" fill="${color}"/>
+<path d="M16 9.5H15V6.5H16V9.5Z" fill="${color}"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M7.5 4.05664C7.77597 3.78068 8.22403 3.78068 8.5 4.05664L9.66992 5.22754C9.94584 5.50351 9.94588 5.95062 9.66992 6.22656L8.5 7.39746C8.25861 7.63885 7.88559 7.66919 7.61133 7.48828L7.50098 7.39746L6.33008 6.22656C6.05412 5.9506 6.05412 5.5035 6.33008 5.22754L7.5 4.05664ZM6.88379 5.72656L8 6.84277L9.11523 5.72656L8 4.61133L6.88379 5.72656ZM6.36426 6.03418C6.38457 6.06491 6.40848 6.09403 6.43555 6.12109L6.36426 6.03418C6.34394 6.00335 6.32703 5.96998 6.31348 5.93652L6.36426 6.03418Z" fill="${color}"/>
+<path d="M3.5 1H2C1.44772 1 1 1.44772 1 2V3.5H0V2C0 0.895431 0.895431 0 2 0H3.5V1Z" fill="${color}"/>
+<path d="M14 0C15.1046 0 16 0.895431 16 2V3.5H15V2C15 1.44772 14.5523 1 14 1H12.5V0H14Z" fill="${color}"/>
+<path d="M9.5 1H6.5V0H9.5V1Z" fill="${color}"/>
+</g>
+<defs>
+<clipPath id="clip0_17_5465">
+<rect width="16" height="16" fill="white"/>
+</clipPath>
+</defs>
+</svg>`}
+  />
+)
+
+// Single Component Icon  
+const ComponentIcon = ({ color = "#000000", size = 16 }: { color?: string, size?: number }) => (
+  <SVG 
+    src={`<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_17_5462)">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M3.30621 5.5061L0.969605 7.84269C0.882818 7.92948 0.882819 8.07019 0.969605 8.15697L3.30621 10.4936C3.39299 10.5804 3.53369 10.5804 3.62048 10.4936L5.95708 8.15697C6.04386 8.07019 6.04386 7.92948 5.95708 7.84269L3.62048 5.5061C3.53369 5.41931 3.39299 5.41931 3.30621 5.5061ZM7.21416 9.41404L4.87755 11.7507C4.44364 12.1845 4.44364 12.8881 4.87755 13.322L7.21416 15.6586C7.64808 16.0925 8.35159 16.0925 8.78551 15.6586L11.1221 13.322C11.556 12.8881 11.556 12.1845 11.1221 11.7507L8.78551 9.41404C8.35159 8.98009 7.64808 8.98009 7.21416 9.41404ZM7.21463 6.58609C7.21479 6.58625 7.21447 6.58593 7.21463 6.58609L4.87755 4.24901C4.44364 3.8151 4.44364 3.11158 4.87755 2.67766L7.21416 0.341062C7.64808 -0.0928541 8.35159 -0.0928541 8.78551 0.341062L11.1221 2.67766C11.556 3.11158 11.556 3.8151 11.1221 4.24901L8.78551 6.58562C8.35175 7.01938 7.64858 7.01954 7.21463 6.58609ZM6.58609 8.78504C6.58624 8.78489 6.58593 8.78519 6.58609 8.78504L4.24902 11.1221C3.8151 11.556 3.11158 11.556 2.67767 11.1221L0.341062 8.7855C-0.0928541 8.35159 -0.0928541 7.64807 0.341062 7.21416L2.67767 4.87756C3.11158 4.44364 3.8151 4.44364 4.24902 4.87756L6.58562 7.21416C7.01938 7.64792 7.01953 8.35108 6.58609 8.78504ZM5.50609 3.62047L7.8427 5.95708C7.92948 6.04387 8.07018 6.04387 8.15697 5.95708L10.4936 3.62047C10.5803 3.53369 10.5803 3.39299 10.4936 3.3062L8.15697 0.9696C8.07018 0.882818 7.92948 0.882818 7.8427 0.9696L5.50609 3.3062C5.41931 3.39299 5.41931 3.53369 5.50609 3.62047ZM11.7506 4.87756L9.414 7.21416C8.98014 7.64807 8.98014 8.35159 9.414 8.7855L11.7506 11.1221C12.1846 11.556 12.888 11.556 13.322 11.1221L15.6586 8.7855C16.0925 8.35159 16.0925 7.64807 15.6586 7.21416L13.322 4.87756C12.888 4.44364 12.1846 4.44364 11.7506 4.87756ZM12.3792 5.50609L10.0426 7.84269C9.95578 7.92948 9.95578 8.07019 10.0426 8.15697L12.3792 10.4936C12.466 10.5804 12.6067 10.5804 12.6935 10.4936L15.0301 8.15697C15.1168 8.07019 15.1168 7.92948 15.0301 7.84269L12.6935 5.50609C12.6067 5.41931 12.466 5.41931 12.3792 5.50609ZM10.4936 12.3792L8.15697 10.0426C8.07018 9.95582 7.92948 9.95582 7.8427 10.0426L5.50609 12.3792C5.41931 12.466 5.41931 12.6067 5.50609 12.6934L7.8427 15.03C7.92948 15.1169 8.07018 15.1169 8.15697 15.03L10.4936 12.6934C10.5803 12.6067 10.5803 12.466 10.4936 12.3792Z" fill="${color}" fill-opacity="0.9"/>
+</g>
+<defs>
+<clipPath id="clip0_17_5462">
+<rect width="16" height="16" fill="white"/>
+</clipPath>
+</defs>
+</svg>`}
   />
 )
 
@@ -468,14 +514,37 @@ function Widget() {
     const safePageName = (page.name || '').trim() || 'Unnamed Page'
     const currentPageName = (figma.currentPage.name || '').trim() || 'Current Page'
     
-    return components.map(component => {
+    const result: ComponentAuditData[] = []
+    const processedComponentSets = new Set<string>()
+    
+    components.forEach(component => {
       let componentSetName: string | undefined
       let variantProperties: Record<string, string> | undefined
       const displayName = (component.name || '').trim() || 'Unnamed Component'
+      let isVariant = false
 
       if (component.parent && component.parent.type === 'COMPONENT_SET') {
         const componentSet = component.parent as ComponentSetNode
         componentSetName = (componentSet.name || '').trim() || undefined
+        isVariant = true
+        
+        // Add component set entry if we haven't processed it yet
+        if (componentSetName && !processedComponentSets.has(componentSet.id)) {
+          processedComponentSets.add(componentSet.id)
+          
+          result.push({
+            id: componentSet.id || 'unknown-component-set',
+            name: componentSetName,
+            pageName: safePageName,
+            hasDescription: hasDescription(componentSet as any),
+            hasDocumentationLink: hasDocumentationLink(componentSet as any),
+            hasUnboundProperties: false, // Skip for quick scan
+            unboundProperties: [], // Skip for quick scan
+            isHiddenFromPublishing: isHiddenFromPublishing(componentSetName),
+            isOnCurrentPage: safePageName === currentPageName,
+            isComponentSet: true
+          })
+        }
         
         const variantString = (component.name || '').trim()
         if (variantString) {
@@ -498,7 +567,8 @@ function Widget() {
         }
       }
 
-      return {
+      // Add individual component/variant entry
+      result.push({
         id: component.id || 'unknown-component',
         name: displayName,
         componentSetName,
@@ -509,24 +579,57 @@ function Widget() {
         hasUnboundProperties: false, // Skip for quick scan
         unboundProperties: [], // Skip for quick scan
         isHiddenFromPublishing: isHiddenFromPublishing(componentSetName || displayName),
-        isOnCurrentPage: safePageName === currentPageName
-      }
+        isOnCurrentPage: safePageName === currentPageName,
+        isVariant
+      })
     })
+    
+    // Post-process to determine which component sets should be expandable
+    // For quick scan, we don't have unbound properties data, so component sets are not expandable
+    return result.map(component => ({
+      ...component,
+      hasExpandableContent: component.hasUnboundProperties // Only individual components can be expanded in quick scan
+    }))
   }
 
   const processPageComponents = (page: PageNode): ComponentAuditData[] => {
     const components = page.findAll(node => node.type === 'COMPONENT') as ComponentNode[]
+    const componentSets = page.findAll(node => node.type === 'COMPONENT_SET') as ComponentSetNode[]
     const safePageName = (page.name || '').trim() || 'Unnamed Page'
     const currentPageName = (figma.currentPage.name || '').trim() || 'Current Page'
     
-    return components.map(component => {
+    const result: ComponentAuditData[] = []
+    const processedComponentSets = new Set<string>()
+    
+    // First, process all individual components and identify component sets
+    components.forEach(component => {
       let componentSetName: string | undefined
       let variantProperties: Record<string, string> | undefined
       let displayName = (component.name || '').trim() || 'Unnamed Component'
+      let isVariant = false
 
       if (component.parent && component.parent.type === 'COMPONENT_SET') {
         const componentSet = component.parent as ComponentSetNode
         componentSetName = (componentSet.name || '').trim() || undefined
+        isVariant = true
+        
+        // Add component set entry if we haven't processed it yet
+        if (componentSetName && !processedComponentSets.has(componentSet.id)) {
+          processedComponentSets.add(componentSet.id)
+          
+          result.push({
+            id: componentSet.id || 'unknown-component-set',
+            name: componentSetName,
+            pageName: safePageName,
+            hasDescription: hasDescription(componentSet as any), // ComponentSetNode has same description property
+            hasDocumentationLink: hasDocumentationLink(componentSet as any), // ComponentSetNode has same documentationLinks property
+            hasUnboundProperties: false, // Component sets don't have unbound properties directly
+            unboundProperties: [],
+            isHiddenFromPublishing: isHiddenFromPublishing(componentSetName),
+            isOnCurrentPage: safePageName === currentPageName,
+            isComponentSet: true
+          })
+        }
         
         const variantString = (component.name || '').trim()
         if (variantString) {
@@ -551,7 +654,8 @@ function Widget() {
 
       const unboundCheck = checkForUnboundProperties(component)
 
-      return {
+      // Add individual component/variant entry
+      result.push({
         id: component.id || 'unknown-component',
         name: displayName,
         componentSetName,
@@ -562,9 +666,32 @@ function Widget() {
         hasUnboundProperties: unboundCheck.hasUnbound,
         unboundProperties: unboundCheck.properties,
         isHiddenFromPublishing: isHiddenFromPublishing(componentSetName || displayName),
-        isOnCurrentPage: safePageName === currentPageName
+        isOnCurrentPage: safePageName === currentPageName,
+        isVariant
+      })
+    })
+    
+    // Post-process to determine which component sets should be expandable
+    // A component set is expandable if any of its variants have unbound properties
+    const componentSetExpandability = new Map<string, boolean>()
+    
+    result.forEach(component => {
+      if (component.isVariant && component.componentSetName && component.hasUnboundProperties) {
+        // Find the corresponding component set entry
+        const componentSetEntry = result.find(c => c.isComponentSet && c.name === component.componentSetName)
+        if (componentSetEntry) {
+          componentSetExpandability.set(componentSetEntry.id, true)
+        }
       }
     })
+    
+    // Update hasExpandableContent for all entries
+    return result.map(component => ({
+      ...component,
+      hasExpandableContent: component.isComponentSet 
+        ? componentSetExpandability.get(component.id) || false
+        : component.hasUnboundProperties
+    }))
   }
 
   const runQuickScan = async () => {
@@ -824,8 +951,6 @@ function Widget() {
   }
 
   const togglePageExpansion = (pageName: string) => {
-    console.log('togglePageExpansion:', { pageName, currentExpanded: expandedPages.includes(pageName) })
-    
     if (expandedPages.includes(pageName)) {
       setExpandedPages(expandedPages.filter(p => p !== pageName))
     } else {
@@ -1180,7 +1305,6 @@ const navigateToComponent = async (componentId: string, specificNodeId?: string)
   }
 
 const ComponentTable = ({ components, displayedCount }: { components: ComponentAuditData[], displayedCount: number }) => {
-  console.log('ComponentTable render:', { componentsLength: components.length, displayedCount })
   
   // Filter and validate components before rendering
   const validComponents = (components || []).filter(component => 
@@ -1230,12 +1354,15 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
           componentSetName: component.componentSetName ? 
             (component.componentSetName.trim() || undefined) : undefined,
           pageName: (component.pageName || '').trim() || 'Unknown Page',
-          hasDescription: Boolean(component.hasDescription),
-          hasDocumentationLink: Boolean(component.hasDocumentationLink),
-          hasUnboundProperties: Boolean(component.hasUnboundProperties),
-          unboundProperties: component.unboundProperties || [],
-          isHiddenFromPublishing: Boolean(component.isHiddenFromPublishing),
-          isOnCurrentPage: Boolean(component.isOnCurrentPage),
+                      hasDescription: Boolean(component.hasDescription),
+            hasDocumentationLink: Boolean(component.hasDocumentationLink),
+            hasUnboundProperties: Boolean(component.hasUnboundProperties),
+            unboundProperties: component.unboundProperties || [],
+            isHiddenFromPublishing: Boolean(component.isHiddenFromPublishing),
+            isOnCurrentPage: Boolean(component.isOnCurrentPage),
+            isComponentSet: Boolean(component.isComponentSet),
+            isVariant: Boolean(component.isVariant),
+            hasExpandableContent: Boolean(component.hasExpandableContent),
           // Clean variant properties completely
           variantProperties: component.variantProperties ? (() => {
             const cleaned: Record<string, string> = {}
@@ -1251,32 +1378,27 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
           })() : undefined
         }
           
-          console.log('Rendering component:', { 
-            index, 
-            componentId: safeComponent.id, 
-            componentName: safeComponent.name, 
-            isExpanded,
-            hasUnboundProperties: safeComponent.hasUnboundProperties,
-            unboundProperties: safeComponent.unboundProperties.length,
-            componentSetName: safeComponent.componentSetName,
-            variantProperties: safeComponent.variantProperties
-          })
+
           
           try {            
-                                console.log('Starting JSX render for component:', safeComponent.name)
             return (
             <AutoLayout key={safeComponent.id} direction="vertical" spacing={0} width="fill-parent">
               <AutoLayout
                 direction="horizontal" 
                 spacing={0} 
-                padding={{ top: 8, right: 8, bottom: 8, left: 12 }} 
+                padding={{ 
+                  top: 8, 
+                  right: 8, 
+                  bottom: 8, 
+                  left: safeComponent.isVariant ? 34 : 12
+                }} 
                 fill={index % 2 === 0 ? "#FFFFFF" : "#FAFAFA"} 
                 width="fill-parent"
                 hoverStyle={{ fill: "#E3F2FD" }}
                 verticalAlignItems="center"
               >
-                <AutoLayout width={260} direction="horizontal" spacing={8} verticalAlignItems="center">
-                  {safeComponent.hasUnboundProperties && (
+                <AutoLayout width={safeComponent.isVariant ? 238 : 260} direction="horizontal" spacing={8} verticalAlignItems="center">
+                  {safeComponent.hasExpandableContent && (
                     <AutoLayout 
                       width={16} 
                       height={16} 
@@ -1303,9 +1425,18 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
                   >
                     {safeComponent.componentSetName ? (
                       <>
-                        <Text fontSize={11} fill={safeComponent.isOnCurrentPage ? "#1976D2" : "#000000"} fontWeight={600} width="fill-parent">
-                          {safeText(safeComponent.componentSetName)}
-                        </Text>
+                        <AutoLayout direction="horizontal" spacing={6} verticalAlignItems="center" width="fill-parent">
+                          {!safeComponent.isVariant && (
+                            safeComponent.isComponentSet ? (
+                              <ComponentSetIcon color={safeComponent.isOnCurrentPage ? "#1976D2" : "#000000"} size={12} />
+                            ) : (
+                              <ComponentIcon color={safeComponent.isOnCurrentPage ? "#1976D2" : "#000000"} size={12} />
+                            )
+                          )}
+                          <Text fontSize={11} fill={safeComponent.isOnCurrentPage ? "#1976D2" : "#000000"} fontWeight={600} width="fill-parent">
+                            {safeText(safeComponent.componentSetName)}
+                          </Text>
+                        </AutoLayout>
                         {safeComponent.variantProperties && (
                           <AutoLayout direction="vertical" spacing={1}>
                             {Object.keys(safeComponent.variantProperties).map(key => {
@@ -1325,9 +1456,18 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
                       </>
                     ) : (
                       <>
-                        <Text fontSize={11} fill={safeComponent.isOnCurrentPage ? "#1976D2" : "#000000"} fontWeight={600} width={"fill-parent"}>
-                          {safeText(safeComponent.name)}
-                        </Text>
+                        <AutoLayout direction="horizontal" spacing={6} verticalAlignItems="center" width="fill-parent">
+                          {!safeComponent.isVariant && (
+                            safeComponent.isComponentSet ? (
+                              <ComponentSetIcon color={safeComponent.isOnCurrentPage ? "#1976D2" : "#000000"} size={12} />
+                            ) : (
+                              <ComponentIcon color={safeComponent.isOnCurrentPage ? "#1976D2" : "#000000"} size={12} />
+                            )
+                          )}
+                          <Text fontSize={11} fill={safeComponent.isOnCurrentPage ? "#1976D2" : "#000000"} fontWeight={600} width="fill-parent">
+                            {safeText(safeComponent.name)}
+                          </Text>
+                        </AutoLayout>
                         {safeComponent.isHiddenFromPublishing && (
                           <Text fontSize={9} fill="#222">Hidden from publishing</Text>
                         )}
