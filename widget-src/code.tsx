@@ -458,6 +458,7 @@ function Widget() {
         
         if (hasVisibleStrokes) {
         const hasStrokeWeightVar = node.boundVariables && (
+                                    node.boundVariables.strokeWeight !== undefined ||
                                     node.boundVariables.strokeTopWeight !== undefined ||
                                     node.boundVariables.strokeBottomWeight !== undefined ||
                                     node.boundVariables.strokeLeftWeight !== undefined ||
