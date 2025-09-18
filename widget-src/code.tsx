@@ -378,7 +378,7 @@ function Widget() {
               nodeType: node.type,
               cornerRadius: node.cornerRadius,
               boundVariables: node.boundVariables ? Object.keys(node.boundVariables) : 'none',
-              hasUnifiedCornerRadius: !!node.boundVariables?.cornerRadius,
+              hasUnifiedCornerRadius: !!node.boundVariables?.['cornerRadius' as keyof typeof node.boundVariables],
               hasTopLeft: !!node.boundVariables?.topLeftRadius,
               hasTopRight: !!node.boundVariables?.topRightRadius,
               hasBottomLeft: !!node.boundVariables?.bottomLeftRadius,
@@ -388,7 +388,7 @@ function Widget() {
           
           // Check for corner radius variables - both unified cornerRadius (for vectors) and individual corner variables (for other shapes)
           const hasCornerRadiusVar = node.boundVariables && (
-                                    node.boundVariables.cornerRadius !== undefined ||
+                                    node.boundVariables['cornerRadius' as keyof typeof node.boundVariables] !== undefined ||
                                     node.boundVariables.topLeftRadius !== undefined ||
                                     node.boundVariables.topRightRadius !== undefined ||
                                     node.boundVariables.bottomLeftRadius !== undefined ||
@@ -1054,6 +1054,20 @@ const navigateToComponent = async (componentId: string, specificNodeId?: string)
     setExpandedPages([])
     setExpandedComponents([])
     setPageDisplayCounts({})
+  }
+
+  const rescan = async () => {
+    if (quickScanData && auditData.length === 0) {
+      // If we only have quick scan data, re-run quick scan
+      await runQuickScan()
+    } else if (auditData.length > 0) {
+      // If we have deep scan data, re-run the same scope
+      if (currentPageOnly) {
+        await runDeepScanCurrentPage()
+      } else {
+        await runDeepScanAllPages()
+      }
+    }
   }
 
   // Helper function to clean component data for serialization
@@ -1917,15 +1931,27 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
       </AutoLayout>
   
         {(quickScanData || auditData.length > 0) && (
-        <AutoLayout 
-            fill="#F44336"
-            cornerRadius={8} 
-            padding={{ vertical: 4, horizontal: 8 }} 
-            onClick={resetAll}
-            hoverStyle={{ fill: "#D32F2F" }}
-            width="hug-contents"
-          >
-            <Text fontSize={10} fill="#FFFFFF">Reset</Text>
+          <AutoLayout direction="horizontal" spacing={8}>
+            <AutoLayout 
+              fill="#1976D2"
+              cornerRadius={8} 
+              padding={{ vertical: 4, horizontal: 8 }} 
+              onClick={rescan}
+              hoverStyle={{ fill: "#1565C0" }}
+              width="hug-contents"
+            >
+              <Text fontSize={10} fill="#FFFFFF">Rescan</Text>
+            </AutoLayout>
+            <AutoLayout 
+              fill="#F44336"
+              cornerRadius={8} 
+              padding={{ vertical: 4, horizontal: 8 }} 
+              onClick={resetAll}
+              hoverStyle={{ fill: "#D32F2F" }}
+              width="hug-contents"
+            >
+              <Text fontSize={10} fill="#FFFFFF">Reset</Text>
+            </AutoLayout>
           </AutoLayout>
         )}
       </AutoLayout>
