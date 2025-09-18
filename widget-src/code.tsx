@@ -239,6 +239,17 @@ function Widget() {
       // Ensure we never create empty currentPath using safeText
       const safeName = safeText(node.name) !== 'N/A' ? safeText(node.name) : (node.type || 'Node');
       const currentPath = path ? `${path} > ${safeName}` : safeName;
+      
+      // Debug logging for stroke weight variables
+      if ('strokeWeight' in node && typeof node.strokeWeight === 'number' && node.strokeWeight > 0 && node.boundVariables?.strokeWeight) {
+        console.log(`Found strokeWeight variable on ${node.type}:`, {
+          nodeName: node.name,
+          nodeType: node.type,
+          strokeWeight: node.strokeWeight,
+          hasStrokeWeightVar: !!node.boundVariables?.strokeWeight,
+          boundVariables: Object.keys(node.boundVariables || {})
+        });
+      }
 
       if ('fills' in node && node.fills && node.fills !== figma.mixed) {
         const fills = node.fills as readonly Paint[];
@@ -360,10 +371,38 @@ function Widget() {
 
       if ('cornerRadius' in node && node.cornerRadius !== undefined) {
         if (typeof node.cornerRadius === 'number' && node.cornerRadius > 0) {
-          const hasCornerRadiusVar = node.boundVariables && 
-                                    node.boundVariables.topLeftRadius !== undefined;
+          // Debug logging for corner radius detection
+          if (node.type === 'VECTOR') {
+            console.log(`Vector corner radius check:`, {
+              nodeName: node.name,
+              nodeType: node.type,
+              cornerRadius: node.cornerRadius,
+              boundVariables: node.boundVariables ? Object.keys(node.boundVariables) : 'none',
+              hasUnifiedCornerRadius: !!node.boundVariables?.cornerRadius,
+              hasTopLeft: !!node.boundVariables?.topLeftRadius,
+              hasTopRight: !!node.boundVariables?.topRightRadius,
+              hasBottomLeft: !!node.boundVariables?.bottomLeftRadius,
+              hasBottomRight: !!node.boundVariables?.bottomRightRadius
+            });
+          }
+          
+          // Check for corner radius variables - both unified cornerRadius (for vectors) and individual corner variables (for other shapes)
+          const hasCornerRadiusVar = node.boundVariables && (
+                                    node.boundVariables.cornerRadius !== undefined ||
+                                    node.boundVariables.topLeftRadius !== undefined ||
+                                    node.boundVariables.topRightRadius !== undefined ||
+                                    node.boundVariables.bottomLeftRadius !== undefined ||
+                                    node.boundVariables.bottomRightRadius !== undefined
+                                  );
           
           if (!hasCornerRadiusVar) {
+            if (node.type === 'VECTOR') {
+              console.log(`Vector flagged as unbound corner radius:`, {
+                nodeName: node.name,
+                cornerRadius: node.cornerRadius,
+                boundVariables: node.boundVariables ? Object.keys(node.boundVariables) : 'none'
+              });
+            }
             unboundProperties.push({
               type: 'cornerRadius',
               property: 'Corner Radius',
@@ -466,6 +505,14 @@ function Widget() {
                                   );
         
         if (!hasStrokeWeightVar) {
+          console.log(`Missing strokeWeight variable on ${node.type}:`, {
+            nodeName: node.name,
+            nodeType: node.type,
+            strokeWeight: node.strokeWeight,
+            boundVariables: node.boundVariables ? Object.keys(node.boundVariables) : 'none',
+            hasStrokeWeight: !!node.boundVariables?.strokeWeight,
+            hasStrokeTopWeight: !!node.boundVariables?.strokeTopWeight
+          });
           unboundProperties.push({
             type: 'stroke',
             property: 'Stroke Weight',
