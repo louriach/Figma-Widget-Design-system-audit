@@ -194,6 +194,22 @@ const ComponentIcon = ({ color = "#000000", size = 16 }: { color?: string, size?
   />
 )
 
+const SettingsIcon = ({ color = "#666666", size = 16 }: { color?: string, size?: number }) => (
+  <SVG
+    src={`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>`}
+  />
+)
+
+interface SettingsState {
+  showMissingDescription: boolean
+  showMissingDocsLink: boolean
+  showMissingVariables: boolean
+  hideZeroValues: boolean
+}
+
 function Widget() {
   const [auditData, setAuditData] = useSyncedState<ComponentAuditData[]>('auditData', [])
   const [quickScanData, setQuickScanData] = useSyncedState<QuickScanData | null>('quickScanData', null)
@@ -207,6 +223,13 @@ function Widget() {
   const [expandedComponents, setExpandedComponents] = useSyncedState<string[]>('expandedComponents', [])
   const [pageDisplayCounts, setPageDisplayCounts] = useSyncedState<Record<string, number>>('pageDisplayCounts', {})
   const [isProgressExpanded, setIsProgressExpanded] = useSyncedState('isProgressExpanded', true)
+  const [isSettingsExpanded, setIsSettingsExpanded] = useSyncedState('isSettingsExpanded', false)
+  const [settings, setSettings] = useSyncedState<SettingsState>('settings', {
+    showMissingDescription: true,
+    showMissingDocsLink: true,
+    showMissingVariables: true,
+    hideZeroValues: false
+  })
 
   const CHUNK_SIZE = 5
   const LOAD_MORE_SIZE = 10
@@ -240,16 +263,6 @@ function Widget() {
       const safeName = safeText(node.name) !== 'N/A' ? safeText(node.name) : (node.type || 'Node');
       const currentPath = path ? `${path} > ${safeName}` : safeName;
       
-      // Debug logging for stroke weight variables
-      if ('strokeWeight' in node && typeof node.strokeWeight === 'number' && node.strokeWeight > 0 && node.boundVariables?.strokeWeight) {
-        console.log(`Found strokeWeight variable on ${node.type}:`, {
-          nodeName: node.name,
-          nodeType: node.type,
-          strokeWeight: node.strokeWeight,
-          hasStrokeWeightVar: !!node.boundVariables?.strokeWeight,
-          boundVariables: Object.keys(node.boundVariables || {})
-        });
-      }
 
       if ('fills' in node && node.fills && node.fills !== figma.mixed) {
         const fills = node.fills as readonly Paint[];
@@ -370,22 +383,7 @@ function Widget() {
       }
 
       if ('cornerRadius' in node && node.cornerRadius !== undefined) {
-        if (typeof node.cornerRadius === 'number' && node.cornerRadius > 0) {
-          // Debug logging for corner radius detection
-          if (node.type === 'VECTOR') {
-            console.log(`Vector corner radius check:`, {
-              nodeName: node.name,
-              nodeType: node.type,
-              cornerRadius: node.cornerRadius,
-              boundVariables: node.boundVariables ? Object.keys(node.boundVariables) : 'none',
-              hasUnifiedCornerRadius: !!node.boundVariables?.['cornerRadius' as keyof typeof node.boundVariables],
-              hasTopLeft: !!node.boundVariables?.topLeftRadius,
-              hasTopRight: !!node.boundVariables?.topRightRadius,
-              hasBottomLeft: !!node.boundVariables?.bottomLeftRadius,
-              hasBottomRight: !!node.boundVariables?.bottomRightRadius
-            });
-          }
-          
+        if (typeof node.cornerRadius === 'number' && node.cornerRadius >= 0) {
           // Check for corner radius variables - both unified cornerRadius (for vectors) and individual corner variables (for other shapes)
           const hasCornerRadiusVar = node.boundVariables && (
                                     node.boundVariables['cornerRadius' as keyof typeof node.boundVariables] !== undefined ||
@@ -396,13 +394,6 @@ function Widget() {
                                   );
           
           if (!hasCornerRadiusVar) {
-            if (node.type === 'VECTOR') {
-              console.log(`Vector flagged as unbound corner radius:`, {
-                nodeName: node.name,
-                cornerRadius: node.cornerRadius,
-                boundVariables: node.boundVariables ? Object.keys(node.boundVariables) : 'none'
-              });
-            }
             unboundProperties.push({
               type: 'cornerRadius',
               property: 'Corner Radius',
@@ -422,7 +413,7 @@ function Widget() {
           // Skip spacing checks if primaryAxisAlignItems is 'SPACE_BETWEEN' (indicates "auto" spacing)
           const isAutoSpacing = layoutNode.primaryAxisAlignItems === 'SPACE_BETWEEN';
           
-          if ('itemSpacing' in layoutNode && layoutNode.itemSpacing > 0 && !isAutoSpacing) {
+          if ('itemSpacing' in layoutNode && layoutNode.itemSpacing >= 0 && !isAutoSpacing) {
             // Flag non-10px values without variables (10px = Figma's default "auto" value)
             if (layoutNode.itemSpacing !== 10) {
               const hasItemSpacingVar = layoutNode.boundVariables && 
@@ -449,7 +440,7 @@ function Widget() {
             ];
             
             paddings.forEach(padding => {
-              if (padding.value > 0) {
+              if (padding.value >= 0) {
                 const hasPaddingVar = layoutNode.boundVariables && 
                                      layoutNode.boundVariables[padding.key as keyof typeof layoutNode.boundVariables] !== undefined;
                 if (!hasPaddingVar) {
@@ -487,15 +478,15 @@ function Widget() {
         }
       }
 
-      // Fixed stroke weight checking - only check if there are visible strokes AND stroke weight > 0
-      if ('strokeWeight' in node && typeof node.strokeWeight === 'number' && node.strokeWeight > 0) {
-        // Also check if there are actually visible strokes applied
-        const hasVisibleStrokes = 'strokes' in node && 
-                                  node.strokes && 
-                                  node.strokes.length > 0 && 
-                                  node.strokes.some(stroke => stroke.visible !== false);
+      // Check stroke weight - check if strokes are defined OR if strokeWeight > 0
+      if ('strokeWeight' in node && typeof node.strokeWeight === 'number') {
+        // Check if strokes are defined (even if not visible or weight is 0)
+        const hasStrokes = 'strokes' in node && 
+                          node.strokes && 
+                          node.strokes.length > 0;
         
-        if (hasVisibleStrokes) {
+        // Only check if strokes are defined OR strokeWeight > 0
+        if (hasStrokes || node.strokeWeight > 0) {
         const hasStrokeWeightVar = node.boundVariables && (
                                     node.boundVariables.strokeWeight !== undefined ||
                                     node.boundVariables.strokeTopWeight !== undefined ||
@@ -505,16 +496,8 @@ function Widget() {
                                   );
         
         if (!hasStrokeWeightVar) {
-          console.log(`Missing strokeWeight variable on ${node.type}:`, {
-            nodeName: node.name,
-            nodeType: node.type,
-            strokeWeight: node.strokeWeight,
-            boundVariables: node.boundVariables ? Object.keys(node.boundVariables) : 'none',
-            hasStrokeWeight: !!node.boundVariables?.strokeWeight,
-            hasStrokeTopWeight: !!node.boundVariables?.strokeTopWeight
-          });
           unboundProperties.push({
-            type: 'stroke',
+            type: 'strokeWeight',
             property: 'Stroke Weight',
             currentValue: safeText(`${node.strokeWeight}px`),
             nodePath: safeText(currentPath),
@@ -981,8 +964,62 @@ function Widget() {
     })
   }
 
+  const filterUnboundPropertiesWithZeroValues = (properties: UnboundProperty[]): UnboundProperty[] => {
+    if (!settings.hideZeroValues) return properties
+    
+    // Filter out properties where the value is "0" or starts with "0px", "0 ", etc.
+    return properties.filter(prop => {
+      const value = (prop.currentValue || '').trim().toLowerCase()
+      // Check if value is exactly "0" or starts with "0px", "0pt", "0rem", etc.
+      return value !== '0' && !value.match(/^0(px|pt|rem|em|%|\s)/)
+    })
+  }
+
+  const shouldShowComponent = (component: ComponentAuditData): boolean => {
+    // Check if any filters are active
+    const hasActiveFilters = settings.showMissingDescription || 
+                             settings.showMissingDocsLink || 
+                             settings.showMissingVariables
+    
+    // If no filters are active, show nothing
+    if (!hasActiveFilters) {
+      return false
+    }
+    
+    // When filters are active, component must match at least one active filter
+    let matchesFilter = false
+    
+    if (settings.showMissingDescription && !component.hasDescription) {
+      matchesFilter = true
+    }
+    
+    if (settings.showMissingDocsLink && !component.hasDocumentationLink) {
+      matchesFilter = true
+    }
+    
+    if (settings.showMissingVariables) {
+      if (settings.hideZeroValues) {
+        // Check if there are non-zero unbound properties
+        const filteredProperties = filterUnboundPropertiesWithZeroValues(component.unboundProperties)
+        if (filteredProperties.length > 0) {
+          matchesFilter = true
+        }
+      } else {
+        // Check if there are any unbound properties
+        if (component.hasUnboundProperties) {
+          matchesFilter = true
+        }
+      }
+    }
+    
+    return matchesFilter
+  }
+
   const getPageData = (): PageData[] => {
     const pageGroups = auditData.reduce((acc, component) => {
+      // Apply filter based on settings
+      if (!shouldShowComponent(component)) return acc
+      
       if (!acc[component.pageName]) {
         acc[component.pageName] = []
       }
@@ -1054,6 +1091,13 @@ const navigateToComponent = async (componentId: string, specificNodeId?: string)
     setExpandedPages([])
     setExpandedComponents([])
     setPageDisplayCounts({})
+    setIsSettingsExpanded(false)
+    setSettings({
+      showMissingDescription: true,
+      showMissingDocsLink: true,
+      showMissingVariables: true,
+      hideZeroValues: false
+    })
   }
 
   const rescan = async () => {
@@ -1218,7 +1262,6 @@ const navigateToComponent = async (componentId: string, specificNodeId?: string)
           verticalAlignItems="center" 
           width="fill-parent"
           onClick={() => setIsProgressExpanded(!isProgressExpanded)}
-          hoverStyle={{ fill: '#D8FFD1' }}
           cornerRadius={16}
         >
           {isProgressExpanded ? (
@@ -1266,15 +1309,21 @@ const navigateToComponent = async (componentId: string, specificNodeId?: string)
     )
   }
 
-  const UnboundPropertiesDetail = ({ properties, componentId, isOnCurrentPage }: { 
+  const UnboundPropertiesDetail = ({ properties, componentId, isOnCurrentPage, settings }: { 
     properties: UnboundProperty[], 
     componentId: string, 
-    isOnCurrentPage: boolean 
+    isOnCurrentPage: boolean,
+    settings: SettingsState
   }) => {
     try {
       if (!properties || properties.length === 0) return null
 
-    const groupedProperties = properties.reduce((acc, prop) => {
+    // Apply zero value filter
+    const filteredProperties = filterUnboundPropertiesWithZeroValues(properties)
+    
+    if (filteredProperties.length === 0) return null
+
+    const groupedProperties = filteredProperties.reduce((acc, prop) => {
       const safeType = (prop.type || '').trim() || 'unknown'
       if (!acc[safeType]) {
         acc[safeType] = []
@@ -1285,7 +1334,8 @@ const navigateToComponent = async (componentId: string, specificNodeId?: string)
 
     const typeLabels = {
       fill: '🎨 Colors (Fill)',
-      stroke: '🖊️ Stroke Properties', 
+      stroke: '🖊️ Stroke Properties',
+      strokeWeight: '🖊️ Stroke Properties',
       text: '📝 Typography',
       cornerRadius: '📐 Corner Radius',
       spacing: '📏 Spacing',
@@ -1366,7 +1416,104 @@ const navigateToComponent = async (componentId: string, specificNodeId?: string)
     }
   }
 
-const ComponentTable = ({ components, displayedCount }: { components: ComponentAuditData[], displayedCount: number }) => {
+const SettingsPanel = ({ settings, setSettings }: { 
+  settings: SettingsState, 
+  setSettings: (settings: SettingsState) => void 
+}) => {
+  const toggleSetting = (key: keyof SettingsState) => {
+    setSettings({
+      ...settings,
+      [key]: !settings[key]
+    })
+  }
+
+  return (
+    <AutoLayout direction="vertical" spacing={12} padding={{ left: 8, right: 12, bottom: 12 }} width="fill-parent">
+      <AutoLayout direction="vertical" spacing={8} width="fill-parent">
+        <Text fontSize={11} fill="#666666" fontWeight={600}>Show components missing:</Text>
+        
+        <AutoLayout direction="horizontal" spacing={12} wrap={true} width="fill-parent">
+          <AutoLayout 
+            direction="horizontal" 
+            spacing={6} 
+            padding={6}
+            fill="#FFFFFF"
+            cornerRadius={6}
+            stroke={settings.showMissingDescription ? "#106A00" : "#333333"}
+            strokeWidth={1}
+            onClick={() => toggleSetting('showMissingDescription')}
+            verticalAlignItems="center"
+          >
+            <AutoLayout width={16} height={16} horizontalAlignItems="center" verticalAlignItems="center">
+              {settings.showMissingDescription ? <CircleCheckIcon size={14} color="#106A00" /> : <Rectangle width={12} height={12} stroke="#333333" strokeWidth={1} cornerRadius={2} />}
+            </AutoLayout>
+            <Text fontSize={11} lineHeight={11} fill={settings.showMissingDescription ? "#106A00" : "#333333"}>Description</Text>
+          </AutoLayout>
+          
+          <AutoLayout 
+            direction="horizontal" 
+            spacing={6} 
+            padding={6}
+            fill="#FFFFFF"
+            cornerRadius={6}
+            stroke={settings.showMissingDocsLink ? "#106A00" : "#333333"}
+            strokeWidth={1}
+            onClick={() => toggleSetting('showMissingDocsLink')}
+            verticalAlignItems="center"
+          >
+            <AutoLayout width={16} height={16} horizontalAlignItems="center" verticalAlignItems="center">
+              {settings.showMissingDocsLink ? <CircleCheckIcon size={14} color="#106A00" /> : <Rectangle width={12} height={12} stroke="#333333" strokeWidth={1} cornerRadius={2} />}
+            </AutoLayout>
+            <Text fontSize={11} lineHeight={11} fill={settings.showMissingDocsLink ? "#106A00" : "#333333"}>Docs Link</Text>
+          </AutoLayout>
+          
+          <AutoLayout 
+            direction="horizontal" 
+            spacing={6} 
+            padding={6}
+            fill="#FFFFFF"
+            cornerRadius={6}
+            stroke={settings.showMissingVariables ? "#106A00" : "#333333"}
+            strokeWidth={1}
+            onClick={() => toggleSetting('showMissingVariables')}
+            verticalAlignItems="center"
+          >
+            <AutoLayout width={16} height={16} horizontalAlignItems="center" verticalAlignItems="center">
+              {settings.showMissingVariables ? <CircleCheckIcon size={14} color="#106A00" /> : <Rectangle width={12} height={12} stroke="#333333" strokeWidth={1} cornerRadius={2} />}
+            </AutoLayout>
+            <Text fontSize={11} lineHeight={11} fill={settings.showMissingVariables ? "#106A00" : "#333333"}>Variables</Text>
+          </AutoLayout>
+        </AutoLayout>
+        
+        <AutoLayout direction="vertical" spacing={4} width="fill-parent">
+          <Text fontSize={11} fill="#666666" fontWeight={600}>Filter:</Text>
+          <AutoLayout 
+            direction="horizontal" 
+            spacing={6} 
+            padding={6}
+            fill="#FFFFFF"
+            cornerRadius={6}
+            stroke={settings.hideZeroValues ? "#106A00" : "#333333"}
+            strokeWidth={1}
+            onClick={() => toggleSetting('hideZeroValues')}
+            verticalAlignItems="center"
+          >
+            <AutoLayout width={16} height={16} horizontalAlignItems="center" verticalAlignItems="center">
+              {settings.hideZeroValues ? <CircleCheckIcon size={14} color="#106A00" /> : <Rectangle width={12} height={12} stroke="#333333" strokeWidth={1} cornerRadius={2} />}
+            </AutoLayout>
+            <Text fontSize={11} lineHeight={11} fill={settings.hideZeroValues ? "#106A00" : "#333333"}>Ignore "0" values</Text>
+          </AutoLayout>
+        </AutoLayout>
+      </AutoLayout>
+    </AutoLayout>
+  )
+}
+
+const ComponentTable = ({ components, displayedCount, settings }: { 
+  components: ComponentAuditData[], 
+  displayedCount: number,
+  settings: SettingsState
+}) => {
   
   // Filter and validate components before rendering
   const validComponents = (components || []).filter(component => 
@@ -1460,23 +1607,29 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
                 verticalAlignItems="center"
               >
                 <AutoLayout width={safeComponent.isVariant ? 238 : 260} direction="horizontal" spacing={8} verticalAlignItems="center">
-                  {safeComponent.hasExpandableContent && (
-                    <AutoLayout 
-                      width={16} 
-                      height={16} 
-                      horizontalAlignItems="center" 
-                      verticalAlignItems="center"
-                      onClick={() => toggleComponentExpansion(safeComponent.id)}
-                      hoverStyle={{ fill: "#eee" }}
-                      cornerRadius={2}
-                    >
-                      {isExpanded ? (
-                        <ChevronDownIcon color="#333333" size={10} />
-                      ) : (
-                        <ChevronRightIcon color="#333333" size={10} />
-                      )}
-                    </AutoLayout>
-                  )}
+                  {(() => {
+                    // Check if there are any properties after filtering
+                    const filteredProps = filterUnboundPropertiesWithZeroValues(safeComponent.unboundProperties)
+                    const hasContentToShow = filteredProps.length > 0
+                    
+                    return hasContentToShow && safeComponent.hasExpandableContent && (
+                      <AutoLayout 
+                        width={16} 
+                        height={16} 
+                        horizontalAlignItems="center" 
+                        verticalAlignItems="center"
+                        onClick={() => toggleComponentExpansion(safeComponent.id)}
+                        hoverStyle={{ fill: "#eee" }}
+                        cornerRadius={2}
+                      >
+                        {isExpanded ? (
+                          <ChevronDownIcon color="#333333" size={10} />
+                        ) : (
+                          <ChevronRightIcon color="#333333" size={10} />
+                        )}
+                      </AutoLayout>
+                    )
+                  })()}
                   
                   <AutoLayout 
                     direction="vertical" 
@@ -1584,25 +1737,30 @@ const ComponentTable = ({ components, displayedCount }: { components: ComponentA
                 )}
               </AutoLayout>
               
-              {isExpanded && safeComponent.hasUnboundProperties && (
-                <AutoLayout 
-                  direction="vertical" 
-                  spacing={0} 
-                  padding={{ vertical: 0, horizontal: 12 }}
-                  fill={index % 2 === 0 ? "#FFFFFF" : "#FAFAFA"}
-                  width="fill-parent"
-                >
-                  {safeComponent.unboundProperties && safeComponent.unboundProperties.length > 0 ? (
+              {isExpanded && safeComponent.hasUnboundProperties && (() => {
+                // Check if there are any properties after filtering
+                const filteredProps = filterUnboundPropertiesWithZeroValues(safeComponent.unboundProperties)
+                
+                // Only render the container if there are filtered properties
+                if (filteredProps.length === 0) return null
+                
+                return (
+                  <AutoLayout 
+                    direction="vertical" 
+                    spacing={0} 
+                    padding={{ vertical: 0, horizontal: 12 }}
+                    fill={index % 2 === 0 ? "#FFFFFF" : "#FAFAFA"}
+                    width="fill-parent"
+                  >
                     <UnboundPropertiesDetail 
                       properties={safeComponent.unboundProperties} 
                       componentId={safeComponent.id}
                       isOnCurrentPage={safeComponent.isOnCurrentPage}
+                      settings={settings}
                     />
-                  ) : (
-                    <Text fontSize={11} fill="#666">No unbound properties found</Text>
-                  )}
-                </AutoLayout>
-              )}
+                  </AutoLayout>
+                )
+              })()}
             </AutoLayout>
           )
           } catch (error) {
@@ -1677,7 +1835,6 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
         width="fill-parent"
         verticalAlignItems="center"
         onClick={() => togglePageExpansion(pageData.pageName)}
-        hoverStyle={{ fill: "#F0F0F0" }}
       >
                   {pageData.isExpanded ? (
           <ChevronDownIcon color="#333333" size={14} />
@@ -1706,6 +1863,7 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
           <ComponentTable 
             components={pageData.components} 
             displayedCount={pageData.displayedCount}
+            settings={settings}
           />
         </AutoLayout>
       )}
@@ -2063,6 +2221,29 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
         </Text>
       )}
             </AutoLayout>
+          </AutoLayout>
+  
+          {/* Settings Panel */}
+          <AutoLayout direction="vertical" spacing={0} width="fill-parent" fill="#f9f9f9" cornerRadius={12}>
+            <AutoLayout 
+              direction="horizontal" 
+              spacing={8} 
+              padding={12} 
+              verticalAlignItems="center" 
+              width="fill-parent"
+              onClick={() => setIsSettingsExpanded(!isSettingsExpanded)}
+            >
+              {isSettingsExpanded ? (
+                <ChevronDownIcon color="#333333" size={14} />
+              ) : (
+                <ChevronRightIcon color="#333333" size={14} />
+              )}
+              <Text fontSize={12} fontWeight={600} fill="#333333">Settings</Text>
+            </AutoLayout>
+            
+            {isSettingsExpanded && (
+              <SettingsPanel settings={settings} setSettings={setSettings} />
+            )}
           </AutoLayout>
   
           {/* Progress for deep scan */}
