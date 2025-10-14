@@ -1671,7 +1671,7 @@ const navigateToComponent = async (componentId: string, specificNodeId?: string)
               <>
             {(pageProgress || []).map((page, index) => (
               <AutoLayout key={`${safeText(page.name)}-${index}`} direction="horizontal" spacing={8} verticalAlignItems="center" width="fill-parent">
-                    <AutoLayout direction="horizontal" spacing={2} verticalAlignItems="center">
+                    <AutoLayout direction="horizontal" spacing={4} verticalAlignItems="center">
                       <AutoLayout width={24} height={24} horizontalAlignItems="center" verticalAlignItems="center">
                         {page.status === 'pending' ? (
                           <Text fontSize={12}>⏳</Text>
