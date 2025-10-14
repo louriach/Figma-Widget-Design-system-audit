@@ -20,7 +20,7 @@ const safeText = (value: any): string => {
 }
 
 interface UnboundProperty {
-  type: 'fill' | 'stroke' | 'text' | 'cornerRadius' | 'spacing' | 'effect' | 'strokeWeight'
+  type: 'fill' | 'stroke' | 'text' | 'cornerRadius' | 'spacing' | 'effect' | 'appearance'
   property: string
   currentValue?: string
   nodePath?: string
@@ -208,6 +208,32 @@ interface SettingsState {
   showMissingDocsLink: boolean
   showMissingVariables: boolean
   hideZeroValues: boolean
+  showFillValues: boolean
+  // Stroke group
+  showStrokeColorValues: boolean
+  showStrokeWeightValues: boolean
+  // Text group
+  showFontFamilyValues: boolean
+  showFontSizeValues: boolean
+  showLineHeightValues: boolean
+  // Spacing group
+  showPaddingValues: boolean
+  showPaddingTopValues: boolean
+  showPaddingRightValues: boolean
+  showPaddingBottomValues: boolean
+  showPaddingLeftValues: boolean
+  showItemSpacingValues: boolean
+  // Corner Radius group
+  showAllCornersValues: boolean
+  showTopLeftRadiusValues: boolean
+  showTopRightRadiusValues: boolean
+  showBottomLeftRadiusValues: boolean
+  showBottomRightRadiusValues: boolean
+  // Effects group
+  showEffectValues: boolean
+  showEffectColorValues: boolean
+  showEffectValuesValues: boolean
+  showAppearanceValues: boolean
 }
 
 function Widget() {
@@ -224,11 +250,38 @@ function Widget() {
   const [pageDisplayCounts, setPageDisplayCounts] = useSyncedState<Record<string, number>>('pageDisplayCounts', {})
   const [isProgressExpanded, setIsProgressExpanded] = useSyncedState('isProgressExpanded', true)
   const [isSettingsExpanded, setIsSettingsExpanded] = useSyncedState('isSettingsExpanded', false)
+  const [isIndividualPropsExpanded, setIsIndividualPropsExpanded] = useSyncedState('isIndividualPropsExpanded', false)
   const [settings, setSettings] = useSyncedState<SettingsState>('settings', {
     showMissingDescription: true,
     showMissingDocsLink: true,
     showMissingVariables: true,
-    hideZeroValues: false
+    hideZeroValues: false,
+    showFillValues: true,
+    // Stroke group
+    showStrokeColorValues: true,
+    showStrokeWeightValues: true,
+    // Text group
+    showFontFamilyValues: true,
+    showFontSizeValues: true,
+    showLineHeightValues: true,
+    // Spacing group
+    showPaddingValues: true,
+    showPaddingTopValues: true,
+    showPaddingRightValues: true,
+    showPaddingBottomValues: true,
+    showPaddingLeftValues: true,
+    showItemSpacingValues: true,
+    // Corner Radius group
+    showAllCornersValues: true,
+    showTopLeftRadiusValues: true,
+    showTopRightRadiusValues: true,
+    showBottomLeftRadiusValues: true,
+    showBottomRightRadiusValues: true,
+    // Effects group
+    showEffectValues: true,
+    showEffectColorValues: true,
+    showEffectValuesValues: true,
+    showAppearanceValues: false
   })
 
   const CHUNK_SIZE = 5
@@ -269,8 +322,13 @@ function Widget() {
         fills.forEach((fill, index) => {
           if (fill.type === 'SOLID') {
             // Check for fill color variables - stored in boundVariables.fills array  
-            const isBound = node.boundVariables && 
-                           node.boundVariables.fills !== undefined;
+            const fillBindings = node.boundVariables && 
+                                node.boundVariables.fills &&
+                                Array.isArray(node.boundVariables.fills) &&
+                                node.boundVariables.fills[index];
+            const isBound = fillBindings && 
+                           typeof fillBindings === 'object' &&
+                           (fillBindings as any).type === 'VARIABLE_ALIAS';
             
             const hasStyle = 'fillStyleId' in node && 
                            node.fillStyleId && 
@@ -289,31 +347,103 @@ function Widget() {
         });
       }
 
-      // Fixed stroke checking - only check if strokes exist AND are visible
+      // Stroke checking - report color and weight separately
       if ('strokes' in node && node.strokes && node.strokes.length > 0) {
-        const visibleStrokes = node.strokes.filter(stroke => stroke.visible !== false);
-        if (visibleStrokes.length > 0) {
-          visibleStrokes.forEach((stroke, index) => {
-          if (stroke.type === 'SOLID') {
-            // Check for stroke color variables - stored in boundVariables.strokes array
-            const isBound = node.boundVariables && 
-                           node.boundVariables.strokes !== undefined;
+        const hasVisibleStrokes = node.strokes.some((stroke: Paint) => stroke.visible !== false);
+        
+        if (hasVisibleStrokes) {
+          // Check stroke colors
+          node.strokes.forEach((stroke, originalIndex) => {
+            if (stroke.visible === false) return;
             
-            const hasStyle = 'strokeStyleId' in node && 
-                           node.strokeStyleId && 
+            if (stroke.type === 'SOLID') {
+              const strokeBindings = node.boundVariables && 
+                                    node.boundVariables.strokes &&
+                                    Array.isArray(node.boundVariables.strokes) &&
+                                    node.boundVariables.strokes[originalIndex];
+              const isColorBound = strokeBindings && 
+                                  typeof strokeBindings === 'object' &&
+                                  (strokeBindings as any).type === 'VARIABLE_ALIAS';
+              
+              const hasStyle = 'strokeStyleId' in node && 
+                             node.strokeStyleId && 
                              node.strokeStyleId !== '';
-            
-            if (!isBound && !hasStyle) {
-              unboundProperties.push({
-                type: 'stroke',
-                  property: visibleStrokes.length > 1 ? `Stroke ${index + 1}` : 'Stroke',
-                currentValue: safeText(formatColor(stroke.color)),
-                nodePath: safeText(currentPath),
-                nodeId: node.id
+              
+              if (!isColorBound && !hasStyle) {
+                const visibleStrokesCount = node.strokes.filter(s => s.visible !== false).length;
+                unboundProperties.push({
+                  type: 'stroke',
+                  property: visibleStrokesCount > 1 ? `Stroke ${originalIndex + 1} Color` : 'Stroke Color',
+                  currentValue: safeText(formatColor(stroke.color)),
+                  nodePath: safeText(currentPath),
+                  nodeId: node.id
                 });
+              }
+            }
+          });
+          
+          // Check stroke weight separately
+          if ('strokeWeight' in node) {
+            // Check if strokeWeight is a single value or mixed (individual values)
+            if (typeof node.strokeWeight === 'number') {
+              // Single stroke weight value - check both strokeWeight and individual sides
+              // Figma can store uniform stroke weight variables as individual side properties
+              const boundVar = node.boundVariables && node.boundVariables.strokeWeight;
+              const isWeightBound = boundVar && 
+                                   typeof boundVar === 'object' &&
+                                   (boundVar as any).type === 'VARIABLE_ALIAS';
+              
+              // Also check if all individual sides have the same variable binding
+              const topBound = node.boundVariables && (node.boundVariables as any).strokeTopWeight;
+              const rightBound = node.boundVariables && (node.boundVariables as any).strokeRightWeight;
+              const bottomBound = node.boundVariables && (node.boundVariables as any).strokeBottomWeight;
+              const leftBound = node.boundVariables && (node.boundVariables as any).strokeLeftWeight;
+              
+              const hasIndividualBindings = (topBound || rightBound || bottomBound || leftBound);
+              const allSidesBound = topBound && rightBound && bottomBound && leftBound &&
+                                   topBound.type === 'VARIABLE_ALIAS' &&
+                                   rightBound.type === 'VARIABLE_ALIAS' &&
+                                   bottomBound.type === 'VARIABLE_ALIAS' &&
+                                   leftBound.type === 'VARIABLE_ALIAS';
+              
+              if (!isWeightBound && !allSidesBound) {
+                unboundProperties.push({
+                  type: 'stroke',
+                  property: 'Stroke Weight',
+                  currentValue: safeText(`${node.strokeWeight}px`),
+                  nodePath: safeText(currentPath),
+                  nodeId: node.id
+                });
+              }
+            } else if (node.strokeWeight === figma.mixed) {
+              // Individual stroke weights - check each side
+              const strokeSides = [
+                { key: 'strokeTopWeight', name: 'Stroke Top Weight', value: (node as any).strokeTopWeight },
+                { key: 'strokeRightWeight', name: 'Stroke Right Weight', value: (node as any).strokeRightWeight },
+                { key: 'strokeBottomWeight', name: 'Stroke Bottom Weight', value: (node as any).strokeBottomWeight },
+                { key: 'strokeLeftWeight', name: 'Stroke Left Weight', value: (node as any).strokeLeftWeight }
+              ];
+              
+              strokeSides.forEach(side => {
+                if (typeof side.value === 'number') {
+                  const boundVar = node.boundVariables && (node.boundVariables as any)[side.key];
+                  const isSideBound = boundVar && 
+                                     typeof boundVar === 'object' &&
+                                     (boundVar as any).type === 'VARIABLE_ALIAS';
+                  
+                  if (!isSideBound) {
+                    unboundProperties.push({
+                      type: 'stroke',
+                      property: side.name,
+                      currentValue: safeText(`${side.value}px`),
+                      nodePath: safeText(currentPath),
+                      nodeId: node.id
+                    });
+                  }
+                }
+              });
             }
           }
-          });
         }
       }
 
@@ -383,20 +513,48 @@ function Widget() {
       }
 
       if ('cornerRadius' in node && node.cornerRadius !== undefined) {
-        if (typeof node.cornerRadius === 'number' && node.cornerRadius >= 0) {
-          // Check for corner radius variables - both unified cornerRadius (for vectors) and individual corner variables (for other shapes)
-          const hasCornerRadiusVar = node.boundVariables && (
-                                    node.boundVariables['cornerRadius' as keyof typeof node.boundVariables] !== undefined ||
-                                    node.boundVariables.topLeftRadius !== undefined ||
-                                    node.boundVariables.topRightRadius !== undefined ||
-                                    node.boundVariables.bottomLeftRadius !== undefined ||
-                                    node.boundVariables.bottomRightRadius !== undefined
-                                  );
+        // Check if individual corner properties exist on the node
+        // These exist as separate properties when corners have different values or individual variables
+        const hasIndividualCorners = 'topLeftRadius' in node;
+        
+        if (hasIndividualCorners) {
+          // Node has individual corner properties - check each one
+          const corners = [
+            { key: 'topLeftRadius', name: 'Top Left Radius', value: (node as any).topLeftRadius },
+            { key: 'topRightRadius', name: 'Top Right Radius', value: (node as any).topRightRadius },
+            { key: 'bottomLeftRadius', name: 'Bottom Left Radius', value: (node as any).bottomLeftRadius },
+            { key: 'bottomRightRadius', name: 'Bottom Right Radius', value: (node as any).bottomRightRadius }
+          ];
           
-          if (!hasCornerRadiusVar) {
+          corners.forEach(corner => {
+            if (typeof corner.value === 'number' && corner.value >= 0) {
+              const boundVar = node.boundVariables && (node.boundVariables as any)[corner.key];
+              const hasCornerVar = boundVar && 
+                                  typeof boundVar === 'object' &&
+                                  boundVar.type === 'VARIABLE_ALIAS';
+              
+              if (!hasCornerVar) {
+                unboundProperties.push({
+                  type: 'cornerRadius',
+                  property: corner.name,
+                  currentValue: safeText(`${corner.value}px`),
+                  nodePath: safeText(currentPath),
+                  nodeId: node.id
+                });
+              }
+            }
+          });
+        } else if (typeof node.cornerRadius === 'number' && node.cornerRadius >= 0) {
+          // Unified corner radius (all corners same, no individual properties)
+          const hasUnifiedCornerVar = node.boundVariables && 
+                                     node.boundVariables['cornerRadius' as keyof typeof node.boundVariables] &&
+                                     typeof node.boundVariables['cornerRadius' as keyof typeof node.boundVariables] === 'object' &&
+                                     (node.boundVariables['cornerRadius' as keyof typeof node.boundVariables] as any).type === 'VARIABLE_ALIAS';
+          
+          if (!hasUnifiedCornerVar) {
             unboundProperties.push({
               type: 'cornerRadius',
-              property: 'Corner Radius',
+              property: 'All Corners',
               currentValue: safeText(`${node.cornerRadius}px`),
               nodePath: safeText(currentPath),
               nodeId: node.id
@@ -413,21 +571,40 @@ function Widget() {
           // Skip spacing checks if primaryAxisAlignItems is 'SPACE_BETWEEN' (indicates "auto" spacing)
           const isAutoSpacing = layoutNode.primaryAxisAlignItems === 'SPACE_BETWEEN';
           
+          // Check gap property (newer Figma property for spacing between items)
+          if ('gap' in layoutNode && typeof (layoutNode as any).gap === 'number' && !isAutoSpacing) {
+            const gap = (layoutNode as any).gap;
+            const boundVar = layoutNode.boundVariables && (layoutNode.boundVariables as any).gap;
+            const hasGapVar = boundVar && 
+                             typeof boundVar === 'object' &&
+                             boundVar.type === 'VARIABLE_ALIAS';
+            
+            if (!hasGapVar) {
+              unboundProperties.push({
+                type: 'spacing',
+                property: 'Gap',
+                currentValue: safeText(`${gap}px`),
+                nodePath: safeText(currentPath),
+                nodeId: node.id
+              });
+            }
+          }
+          
+          // Check itemSpacing property (older property, still used in some cases)
           if ('itemSpacing' in layoutNode && layoutNode.itemSpacing >= 0 && !isAutoSpacing) {
-            // Flag non-10px values without variables (10px = Figma's default "auto" value)
-            if (layoutNode.itemSpacing !== 10) {
-              const hasItemSpacingVar = layoutNode.boundVariables && 
-                                       layoutNode.boundVariables.itemSpacing !== undefined;
-              
-              if (!hasItemSpacingVar) {
-                unboundProperties.push({
-                  type: 'spacing',
-                  property: 'Item Spacing',
-                  currentValue: safeText(`${layoutNode.itemSpacing}px`),
-                  nodePath: safeText(currentPath),
-                  nodeId: node.id
-                });
-              }
+            const boundVar = layoutNode.boundVariables && layoutNode.boundVariables.itemSpacing;
+            const hasItemSpacingVar = boundVar && 
+                                     typeof boundVar === 'object' &&
+                                     (boundVar as any).type === 'VARIABLE_ALIAS';
+            
+            if (!hasItemSpacingVar) {
+              unboundProperties.push({
+                type: 'spacing',
+                property: 'Item Spacing',
+                currentValue: safeText(`${layoutNode.itemSpacing}px`),
+                nodePath: safeText(currentPath),
+                nodeId: node.id
+              });
             }
           }
 
@@ -441,8 +618,11 @@ function Widget() {
             
             paddings.forEach(padding => {
               if (padding.value >= 0) {
-                const hasPaddingVar = layoutNode.boundVariables && 
-                                     layoutNode.boundVariables[padding.key as keyof typeof layoutNode.boundVariables] !== undefined;
+                const boundVar = layoutNode.boundVariables && 
+                               layoutNode.boundVariables[padding.key as keyof typeof layoutNode.boundVariables];
+                const hasPaddingVar = boundVar && 
+                                     typeof boundVar === 'object' &&
+                                     (boundVar as any).type === 'VARIABLE_ALIAS';
                 if (!hasPaddingVar) {
                   unboundProperties.push({
                     type: 'spacing',
@@ -466,44 +646,128 @@ function Widget() {
         if (!hasEffectStyle) {
           node.effects.forEach((effect, index) => {
             if (effect.visible !== false) {
-                          unboundProperties.push({
-              type: 'effect',
-              property: node.effects.length > 1 ? `Effect ${index + 1} (${effect.type})` : `Effect (${effect.type})`,
-              currentValue: safeText(effect.type),
-              nodePath: safeText(currentPath),
-              nodeId: node.id
-            });
+              const effectLabel = node.effects.length > 1 ? `Effect ${index + 1}` : 'Effect';
+              
+              // Check effect.boundVariables for individual property bindings
+              const effectBoundVars = (effect as any).boundVariables;
+              
+              if (effect.type === 'DROP_SHADOW' || effect.type === 'INNER_SHADOW') {
+                const shadow = effect as DropShadowEffect | InnerShadowEffect;
+                
+                // Check if color is bound
+                const isColorBound = effectBoundVars && 
+                                    effectBoundVars.color &&
+                                    effectBoundVars.color.type === 'VARIABLE_ALIAS';
+                
+                // Check if offsetX/offsetY are bound
+                const isOffsetXBound = effectBoundVars && 
+                                      effectBoundVars.offsetX &&
+                                      effectBoundVars.offsetX.type === 'VARIABLE_ALIAS';
+                const isOffsetYBound = effectBoundVars && 
+                                      effectBoundVars.offsetY &&
+                                      effectBoundVars.offsetY.type === 'VARIABLE_ALIAS';
+                
+                // Check if radius is bound
+                const isRadiusBound = effectBoundVars && 
+                                     effectBoundVars.radius &&
+                                     effectBoundVars.radius.type === 'VARIABLE_ALIAS';
+                
+                // Check if spread is bound
+                const isSpreadBound = effectBoundVars && 
+                                     effectBoundVars.spread &&
+                                     effectBoundVars.spread.type === 'VARIABLE_ALIAS';
+                
+                // Add color if not bound
+                if (!isColorBound && 'color' in shadow && shadow.color) {
+                  const color = shadow.color;
+                  const colorValue = `rgba(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)}, ${color.a !== undefined ? color.a.toFixed(2) : 1})`;
+                  unboundProperties.push({
+                    type: 'effect',
+                    property: `${effectLabel} Color`,
+                    currentValue: safeText(colorValue),
+                    nodePath: safeText(currentPath),
+                    nodeId: node.id
+                  });
+                }
+                
+                // Add offset if not bound
+                if (!isOffsetXBound || !isOffsetYBound) {
+                  unboundProperties.push({
+                    type: 'effect',
+                    property: `${effectLabel} Offset`,
+                    currentValue: safeText(`x: ${shadow.offset.x}, y: ${shadow.offset.y}`),
+                    nodePath: safeText(currentPath),
+                    nodeId: node.id
+                  });
+                }
+                
+                // Add blur if not bound
+                if (!isRadiusBound) {
+                  unboundProperties.push({
+                    type: 'effect',
+                    property: `${effectLabel} Blur`,
+                    currentValue: safeText(`${shadow.radius}`),
+                    nodePath: safeText(currentPath),
+                    nodeId: node.id
+                  });
+                }
+                
+                // Add spread if not bound
+                if (!isSpreadBound && shadow.spread !== undefined) {
+                  unboundProperties.push({
+                    type: 'effect',
+                    property: `${effectLabel} Spread`,
+                    currentValue: safeText(`${shadow.spread || 0}`),
+                    nodePath: safeText(currentPath),
+                    nodeId: node.id
+                  });
+                }
+                
+              } else if (effect.type === 'LAYER_BLUR' || effect.type === 'BACKGROUND_BLUR') {
+                const blur = effect as BlurEffect;
+                
+                // Check if radius is bound
+                const isRadiusBound = effectBoundVars && 
+                                     effectBoundVars.radius &&
+                                     effectBoundVars.radius.type === 'VARIABLE_ALIAS';
+                
+                // Add blur if not bound
+                if (!isRadiusBound) {
+                  unboundProperties.push({
+                    type: 'effect',
+                    property: `${effectLabel} Blur`,
+                    currentValue: safeText(`${blur.radius}`),
+                    nodePath: safeText(currentPath),
+                    nodeId: node.id
+                  });
+                }
+              }
             }
           });
         }
       }
 
-      // Check stroke weight - check if strokes are defined OR if strokeWeight > 0
-      if ('strokeWeight' in node && typeof node.strokeWeight === 'number') {
-        // Check if strokes are defined (even if not visible or weight is 0)
-        const hasStrokes = 'strokes' in node && 
-                          node.strokes && 
-                          node.strokes.length > 0;
+
+      // Check opacity property (layer transparency)
+      // Note: We check ALL opacity values (including 100%) because a hardcoded 100% 
+      // is still a hardcoded value that should potentially use a variable
+      if ('opacity' in node && typeof node.opacity === 'number') {
+        // Check if opacity is bound to a variable
+        // boundVariables.opacity will be an object like { type: "VARIABLE_ALIAS", id: "VariableID:..." } if bound
+        const boundVar = node.boundVariables && (node.boundVariables as any).opacity;
+        const hasOpacityVar = boundVar && 
+                             typeof boundVar === 'object' &&
+                             boundVar.type === 'VARIABLE_ALIAS';
         
-        // Only check if strokes are defined OR strokeWeight > 0
-        if (hasStrokes || node.strokeWeight > 0) {
-        const hasStrokeWeightVar = node.boundVariables && (
-                                    node.boundVariables.strokeWeight !== undefined ||
-                                    node.boundVariables.strokeTopWeight !== undefined ||
-                                    node.boundVariables.strokeBottomWeight !== undefined ||
-                                    node.boundVariables.strokeLeftWeight !== undefined ||
-                                    node.boundVariables.strokeRightWeight !== undefined
-                                  );
-        
-        if (!hasStrokeWeightVar) {
+        // Report any opacity value that doesn't have a variable (including 100%)
+        if (!hasOpacityVar) {
           unboundProperties.push({
-            type: 'strokeWeight',
-            property: 'Stroke Weight',
-            currentValue: safeText(`${node.strokeWeight}px`),
+            type: 'appearance',
+            property: 'Opacity',
+            currentValue: safeText(`${Math.round(node.opacity * 100)}%`),
             nodePath: safeText(currentPath),
             nodeId: node.id
-            });
-          }
+          });
         }
       }
 
@@ -965,13 +1229,113 @@ function Widget() {
   }
 
   const filterUnboundPropertiesWithZeroValues = (properties: UnboundProperty[]): UnboundProperty[] => {
-    if (!settings.hideZeroValues) return properties
-    
-    // Filter out properties where the value is "0" or starts with "0px", "0 ", etc.
     return properties.filter(prop => {
-      const value = (prop.currentValue || '').trim().toLowerCase()
-      // Check if value is exactly "0" or starts with "0px", "0pt", "0rem", etc.
-      return value !== '0' && !value.match(/^0(px|pt|rem|em|%|\s)/)
+      // Granular filtering based on property type and property name
+      let shouldShow = false
+      
+      switch (prop.type) {
+        case 'fill':
+          shouldShow = settings.showFillValues
+          break
+        case 'stroke':
+          // Check if it's stroke color or stroke weight
+          if (prop.property.includes('Weight')) {
+            shouldShow = settings.showStrokeWeightValues
+          } else {
+            shouldShow = settings.showStrokeColorValues
+          }
+          break
+        case 'text':
+          // Check specific text property
+          if (prop.property === 'Font Family') {
+            shouldShow = settings.showFontFamilyValues
+          } else if (prop.property === 'Font Size') {
+            shouldShow = settings.showFontSizeValues
+          } else if (prop.property === 'Line Height') {
+            shouldShow = settings.showLineHeightValues
+          } else {
+            // Default for any other text properties
+            shouldShow = settings.showFontFamilyValues || settings.showFontSizeValues || settings.showLineHeightValues
+          }
+          break
+        case 'spacing':
+          // Check specific spacing property
+          if (prop.property === 'Padding Top') {
+            shouldShow = settings.showPaddingTopValues
+          } else if (prop.property === 'Padding Right') {
+            shouldShow = settings.showPaddingRightValues
+          } else if (prop.property === 'Padding Bottom') {
+            shouldShow = settings.showPaddingBottomValues
+          } else if (prop.property === 'Padding Left') {
+            shouldShow = settings.showPaddingLeftValues
+          } else if (prop.property === 'Item Spacing' || prop.property === 'Gap') {
+            shouldShow = settings.showItemSpacingValues
+          } else {
+            // Default for any other spacing properties
+            shouldShow = settings.showPaddingTopValues || 
+                        settings.showPaddingRightValues || 
+                        settings.showPaddingBottomValues || 
+                        settings.showPaddingLeftValues || 
+                        settings.showItemSpacingValues
+          }
+          break
+        case 'cornerRadius':
+          // Check specific corner radius property
+          if (prop.property === 'All Corners') {
+            shouldShow = settings.showAllCornersValues
+          } else if (prop.property === 'Top Left Radius') {
+            shouldShow = settings.showTopLeftRadiusValues
+          } else if (prop.property === 'Top Right Radius') {
+            shouldShow = settings.showTopRightRadiusValues
+          } else if (prop.property === 'Bottom Left Radius') {
+            shouldShow = settings.showBottomLeftRadiusValues
+          } else if (prop.property === 'Bottom Right Radius') {
+            shouldShow = settings.showBottomRightRadiusValues
+          } else {
+            // Default for any other corner radius properties
+            shouldShow = settings.showAllCornersValues || 
+                        settings.showTopLeftRadiusValues || 
+                        settings.showTopRightRadiusValues || 
+                        settings.showBottomLeftRadiusValues || 
+                        settings.showBottomRightRadiusValues
+          }
+          break
+        case 'effect':
+          // Check specific effect property
+          if (prop.property.includes('Color')) {
+            shouldShow = settings.showEffectColorValues
+          } else if (prop.property.includes('Offset') || 
+                     prop.property.includes('Blur') || 
+                     prop.property.includes('Spread')) {
+            shouldShow = settings.showEffectValuesValues
+          } else {
+            // Effect type - show if any effect setting is on
+            shouldShow = settings.showEffectValues || 
+                        settings.showEffectColorValues || 
+                        settings.showEffectValuesValues
+          }
+          break
+        case 'appearance':
+          shouldShow = settings.showAppearanceValues
+          break
+        default:
+          shouldShow = true
+      }
+      
+      if (!shouldShow) {
+        return false
+      }
+      
+      // Filter out zero values if that setting is enabled
+      if (settings.hideZeroValues) {
+        const value = (prop.currentValue || '').trim().toLowerCase()
+        // Check if value is exactly "0" or starts with "0px", "0pt", "0rem", etc.
+        if (value === '0' || value.match(/^0(px|pt|rem|em|%|\s)/)) {
+          return false
+        }
+      }
+      
+      return true
     })
   }
 
@@ -1092,11 +1456,38 @@ const navigateToComponent = async (componentId: string, specificNodeId?: string)
     setExpandedComponents([])
     setPageDisplayCounts({})
     setIsSettingsExpanded(false)
+    setIsIndividualPropsExpanded(false)
     setSettings({
       showMissingDescription: true,
       showMissingDocsLink: true,
       showMissingVariables: true,
-      hideZeroValues: false
+      hideZeroValues: false,
+      showFillValues: true,
+      // Stroke group
+      showStrokeColorValues: true,
+      showStrokeWeightValues: true,
+      // Text group
+      showFontFamilyValues: true,
+      showFontSizeValues: true,
+      showLineHeightValues: true,
+      // Spacing group
+      showPaddingValues: true,
+      showPaddingTopValues: true,
+      showPaddingRightValues: true,
+      showPaddingBottomValues: true,
+      showPaddingLeftValues: true,
+      showItemSpacingValues: true,
+      // Corner Radius group
+      showAllCornersValues: true,
+      showTopLeftRadiusValues: true,
+      showTopRightRadiusValues: true,
+      showBottomLeftRadiusValues: true,
+      showBottomRightRadiusValues: true,
+      // Effects group
+      showEffectValues: true,
+      showEffectColorValues: true,
+      showEffectValuesValues: true,
+      showAppearanceValues: false
     })
   }
 
@@ -1231,7 +1622,7 @@ const navigateToComponent = async (componentId: string, specificNodeId?: string)
             onClick={createSummaryFrame}
             hoverStyle={{ fill: "#FCF5FF", stroke: "#8C00BA" }}
           >
-            <Text fontSize={12} fill="#69008C" fontWeight={600}>Add summary the canvas</Text>
+            <Text fontSize={12} fill="#69008C" fontWeight={600}>Add summary to the canvas</Text>
           </AutoLayout>
           
           {lastScanTime && (
@@ -1335,11 +1726,11 @@ const navigateToComponent = async (componentId: string, specificNodeId?: string)
     const typeLabels = {
       fill: '🎨 Colors (Fill)',
       stroke: '🖊️ Stroke Properties',
-      strokeWeight: '🖊️ Stroke Properties',
       text: '📝 Typography',
       cornerRadius: '📐 Corner Radius',
       spacing: '📏 Spacing',
       effect: '✨ Effects',
+      appearance: '👁️ Appearance',
       unknown: '❓ Unknown Type'
     }
 
@@ -1377,16 +1768,6 @@ const navigateToComponent = async (componentId: string, specificNodeId?: string)
                 >
                   <AutoLayout direction="horizontal" spacing={8} width="fill-parent" verticalAlignItems="center">
                     <AutoLayout direction="vertical" spacing={4} width="fill-parent">
-                      {safeNodePath !== 'N/A' && (
-                        <Text 
-                          fontSize={11} 
-                          fontWeight={600} 
-                          fill="#6A0000" 
-                          width="fill-parent"
-                        >
-                          {safeNodePath}
-                        </Text>
-                      )}
                       <AutoLayout direction="horizontal" spacing={8} width="fill-parent">
                         <Text fontSize={11} fill="#6A0000" width={160}>{safeProperty}:</Text>
                         <Text fontSize={11} fill="#6A0000">{safeCurrentValue}</Text>
@@ -1416,94 +1797,312 @@ const navigateToComponent = async (componentId: string, specificNodeId?: string)
     }
   }
 
-const SettingsPanel = ({ settings, setSettings }: { 
+const SettingsPanel = ({ 
+  settings, 
+  setSettings,
+  isIndividualPropsExpanded,
+  setIsIndividualPropsExpanded
+}: { 
   settings: SettingsState, 
-  setSettings: (settings: SettingsState) => void 
+  setSettings: (settings: SettingsState) => void,
+  isIndividualPropsExpanded: boolean,
+  setIsIndividualPropsExpanded: (value: boolean) => void
 }) => {
   const toggleSetting = (key: keyof SettingsState) => {
-    setSettings({
-      ...settings,
-      [key]: !settings[key]
-    })
+    const newValue = !settings[key]
+    const newSettings = { ...settings }
+    
+    // Handle hierarchical relationships for grouped settings
+    
+    // Stroke group - first checkbox acts as "toggle all"
+    if (key === 'showStrokeColorValues') {
+      // Parent: toggle all children in stroke group
+      newSettings.showStrokeColorValues = newValue
+      newSettings.showStrokeWeightValues = newValue
+    } else if (key === 'showStrokeWeightValues') {
+      // Child affects parent
+      newSettings.showStrokeWeightValues = newValue
+      if (!newValue) {
+        newSettings.showStrokeColorValues = false
+      } else {
+        // Turn on parent only if all siblings are on
+        newSettings.showStrokeColorValues = newSettings.showStrokeColorValues && newValue
+      }
+    }
+    // Text group - first checkbox acts as "toggle all"
+    else if (key === 'showFontFamilyValues') {
+      // Parent: toggle all children in text group
+      newSettings.showFontFamilyValues = newValue
+      newSettings.showFontSizeValues = newValue
+      newSettings.showLineHeightValues = newValue
+    } else if (['showFontSizeValues', 'showLineHeightValues'].includes(key)) {
+      // Child affects parent
+      newSettings[key] = newValue
+      if (!newValue) {
+        newSettings.showFontFamilyValues = false
+      } else {
+        // Turn on parent only if all siblings are on
+        const allTextOn = newSettings.showFontFamilyValues && 
+                         newSettings.showFontSizeValues && 
+                         newSettings.showLineHeightValues
+        newSettings.showFontFamilyValues = allTextOn
+      }
+    }
+    // Spacing group - "Auto layout" is parent of both spacing AND padding directions
+    else if (key === 'showPaddingValues') {
+      // Parent: toggle all children (spacing + padding directions)
+      newSettings.showPaddingValues = newValue
+      newSettings.showItemSpacingValues = newValue
+      newSettings.showPaddingTopValues = newValue
+      newSettings.showPaddingRightValues = newValue
+      newSettings.showPaddingBottomValues = newValue
+      newSettings.showPaddingLeftValues = newValue
+    } else if (['showItemSpacingValues', 'showPaddingTopValues', 'showPaddingRightValues', 'showPaddingBottomValues', 'showPaddingLeftValues'].includes(key)) {
+      // Child: update self and parent
+      newSettings[key] = newValue
+      // If turning off, turn off parent. If turning on, check if all siblings are on
+      if (!newValue) {
+        newSettings.showPaddingValues = false
+      } else {
+        const allSpacingOn = newSettings.showItemSpacingValues &&
+                            newSettings.showPaddingTopValues && 
+                            newSettings.showPaddingRightValues && 
+                            newSettings.showPaddingBottomValues && 
+                            newSettings.showPaddingLeftValues
+        newSettings.showPaddingValues = allSpacingOn
+      }
+    }
+    // Corner Radius group
+    else if (key === 'showAllCornersValues') {
+      // Parent: toggle all children
+      newSettings.showAllCornersValues = newValue
+      newSettings.showTopLeftRadiusValues = newValue
+      newSettings.showTopRightRadiusValues = newValue
+      newSettings.showBottomLeftRadiusValues = newValue
+      newSettings.showBottomRightRadiusValues = newValue
+    } else if (['showTopLeftRadiusValues', 'showTopRightRadiusValues', 'showBottomLeftRadiusValues', 'showBottomRightRadiusValues'].includes(key)) {
+      // Child: update self and parent
+      newSettings[key] = newValue
+      // If turning off, turn off parent. If turning on, check if all siblings are on
+      if (!newValue) {
+        newSettings.showAllCornersValues = false
+      } else {
+        const allCornersOn = newSettings.showTopLeftRadiusValues && 
+                            newSettings.showTopRightRadiusValues && 
+                            newSettings.showBottomLeftRadiusValues && 
+                            newSettings.showBottomRightRadiusValues
+        newSettings.showAllCornersValues = allCornersOn
+      }
+    }
+    // Effects group
+    else if (key === 'showEffectValues') {
+      // Parent: toggle all children
+      newSettings.showEffectValues = newValue
+      newSettings.showEffectColorValues = newValue
+      newSettings.showEffectValuesValues = newValue
+    } else if (['showEffectColorValues', 'showEffectValuesValues'].includes(key)) {
+      // Child: update self and parent
+      newSettings[key] = newValue
+      // If turning off, turn off parent. If turning on, check if all siblings are on
+      if (!newValue) {
+        newSettings.showEffectValues = false
+      } else {
+        const allEffectsOn = newSettings.showEffectColorValues && 
+                            newSettings.showEffectValuesValues
+        newSettings.showEffectValues = allEffectsOn
+      }
+    } else {
+      // No hierarchy, just toggle
+      newSettings[key] = newValue
+    }
+    
+    setSettings(newSettings)
+  }
+  
+  // Helper component for simple checkboxes
+  const SimpleCheckbox = ({ 
+    checked, 
+    label, 
+    onClick,
+    isFirst = false,
+    isLast = false
+  }: { 
+    checked: boolean, 
+    label: string, 
+    onClick: () => void,
+    isFirst?: boolean,
+    isLast?: boolean
+  }) => {
+    // Calculate corner radius based on position
+    let cornerRadius: number | { topLeft: number, topRight: number, bottomLeft: number, bottomRight: number }
+    if (isFirst && isLast) {
+      // Single item - all corners rounded
+      cornerRadius = 10
+    } else if (isFirst) {
+      // First item - left corners rounded
+      cornerRadius = { topLeft: 10, topRight: 0, bottomLeft: 10, bottomRight: 0 }
+    } else if (isLast) {
+      // Last item - right corners rounded
+      cornerRadius = { topLeft: 0, topRight: 10, bottomLeft: 0, bottomRight: 10 }
+    } else {
+      // Middle item - no corners rounded
+      cornerRadius = 0
+    }
+    
+    // Determine fill color based on checked state and position
+    let fillColor: string
+    if (checked) {
+      fillColor = "#E6FDE2" // Light green when checked
+    } else if (isFirst) {
+      fillColor = "#FFFFFF" // White for first item when unchecked
+    } else {
+      fillColor = "#F5F5F5" // Light gray for other items when unchecked
+    }
+    
+    return (
+      <AutoLayout 
+        direction="horizontal" 
+        spacing={4} 
+        onClick={onClick}
+        verticalAlignItems="center"
+        padding={{ top: 4, left: 6, bottom: 4, right: 6 }}
+        cornerRadius={cornerRadius}
+        fill={fillColor}
+        stroke="#fff"
+        strokeWidth={1}
+        height={32}
+      >
+      <AutoLayout 
+        width={14} 
+        height={14} 
+        horizontalAlignItems="center" 
+        verticalAlignItems="center"
+      >
+        {checked ? (
+          <CircleCheckIcon size={14} color="#18A700" />
+        ) : (
+          <Rectangle 
+            width={12} 
+            height={12} 
+            stroke="#999999" 
+            strokeWidth={1} 
+            cornerRadius={2}
+            fill="#FFFFFF"
+          />
+        )}
+      </AutoLayout>
+      <Text fontSize={11} fill={checked ? "#106A00" : "#333333"} fontWeight={500}>{label}</Text>
+    </AutoLayout>
+    )
   }
 
   return (
-    <AutoLayout direction="vertical" spacing={12} padding={{ left: 8, right: 12, bottom: 12 }} width="fill-parent">
+    <AutoLayout direction="vertical" spacing={8} padding={{ left: 8, right: 12, top: 0, bottom: 12 }} width="fill-parent">
+      {/* Top-level checkboxes */}
+      <AutoLayout direction="horizontal" spacing={2} wrap={true} fill={"#F5F5F5"} stroke="#eee" strokeWidth={1} cornerRadius={12} padding={2} width="hug-contents">
+        <SimpleCheckbox 
+          checked={settings.showMissingDescription} 
+          label="Component description" 
+          onClick={() => toggleSetting('showMissingDescription')}
+          isFirst={true}
+        />
+        <SimpleCheckbox 
+          checked={settings.showMissingDocsLink} 
+          label="Documentation link" 
+          onClick={() => toggleSetting('showMissingDocsLink')}
+        />
+        <SimpleCheckbox 
+          checked={settings.showMissingVariables} 
+          label="Variables" 
+          onClick={() => toggleSetting('showMissingVariables')}
+          isLast={true}
+        />
+      </AutoLayout>
+      
+      {/* Individual properties collapsible section */}
       <AutoLayout direction="vertical" spacing={8} width="fill-parent">
-        <Text fontSize={11} fill="#666666" fontWeight={600}>Show components missing:</Text>
-        
-        <AutoLayout direction="horizontal" spacing={12} wrap={true} width="fill-parent">
-          <AutoLayout 
-            direction="horizontal" 
-            spacing={6} 
-            padding={6}
-            fill="#FFFFFF"
-            cornerRadius={6}
-            stroke={settings.showMissingDescription ? "#106A00" : "#333333"}
-            strokeWidth={1}
-            onClick={() => toggleSetting('showMissingDescription')}
-            verticalAlignItems="center"
-          >
-            <AutoLayout width={16} height={16} horizontalAlignItems="center" verticalAlignItems="center">
-              {settings.showMissingDescription ? <CircleCheckIcon size={14} color="#106A00" /> : <Rectangle width={12} height={12} stroke="#333333" strokeWidth={1} cornerRadius={2} />}
-            </AutoLayout>
-            <Text fontSize={11} lineHeight={11} fill={settings.showMissingDescription ? "#106A00" : "#333333"}>Description</Text>
-          </AutoLayout>
-          
-          <AutoLayout 
-            direction="horizontal" 
-            spacing={6} 
-            padding={6}
-            fill="#FFFFFF"
-            cornerRadius={6}
-            stroke={settings.showMissingDocsLink ? "#106A00" : "#333333"}
-            strokeWidth={1}
-            onClick={() => toggleSetting('showMissingDocsLink')}
-            verticalAlignItems="center"
-          >
-            <AutoLayout width={16} height={16} horizontalAlignItems="center" verticalAlignItems="center">
-              {settings.showMissingDocsLink ? <CircleCheckIcon size={14} color="#106A00" /> : <Rectangle width={12} height={12} stroke="#333333" strokeWidth={1} cornerRadius={2} />}
-            </AutoLayout>
-            <Text fontSize={11} lineHeight={11} fill={settings.showMissingDocsLink ? "#106A00" : "#333333"}>Docs Link</Text>
-          </AutoLayout>
-          
-          <AutoLayout 
-            direction="horizontal" 
-            spacing={6} 
-            padding={6}
-            fill="#FFFFFF"
-            cornerRadius={6}
-            stroke={settings.showMissingVariables ? "#106A00" : "#333333"}
-            strokeWidth={1}
-            onClick={() => toggleSetting('showMissingVariables')}
-            verticalAlignItems="center"
-          >
-            <AutoLayout width={16} height={16} horizontalAlignItems="center" verticalAlignItems="center">
-              {settings.showMissingVariables ? <CircleCheckIcon size={14} color="#106A00" /> : <Rectangle width={12} height={12} stroke="#333333" strokeWidth={1} cornerRadius={2} />}
-            </AutoLayout>
-            <Text fontSize={11} lineHeight={11} fill={settings.showMissingVariables ? "#106A00" : "#333333"}>Variables</Text>
-          </AutoLayout>
+        {/* Collapsible header */}
+        <AutoLayout 
+          direction="horizontal" 
+          spacing={6} 
+          onClick={() => setIsIndividualPropsExpanded(!isIndividualPropsExpanded)}
+          verticalAlignItems="center"
+        >
+          {isIndividualPropsExpanded ? (
+            <ChevronDownIcon color="#333333" size={12} />
+          ) : (
+            <ChevronRightIcon color="#333333" size={12} />
+          )}
+          <Text fontSize={11} fontWeight={600} fill="#333333">Individual properties</Text>
         </AutoLayout>
         
-        <AutoLayout direction="vertical" spacing={4} width="fill-parent">
-          <Text fontSize={11} fill="#666666" fontWeight={600}>Filter:</Text>
-          <AutoLayout 
-            direction="horizontal" 
-            spacing={6} 
-            padding={6}
-            fill="#FFFFFF"
-            cornerRadius={6}
-            stroke={settings.hideZeroValues ? "#106A00" : "#333333"}
-            strokeWidth={1}
-            onClick={() => toggleSetting('hideZeroValues')}
-            verticalAlignItems="center"
-          >
-            <AutoLayout width={16} height={16} horizontalAlignItems="center" verticalAlignItems="center">
-              {settings.hideZeroValues ? <CircleCheckIcon size={14} color="#106A00" /> : <Rectangle width={12} height={12} stroke="#333333" strokeWidth={1} cornerRadius={2} />}
+        {isIndividualPropsExpanded && (
+          <AutoLayout direction="vertical" spacing={8} width="hug-contents">
+            {/* Fill, Opacity, Ignore "0" values */}
+            <AutoLayout direction="horizontal" spacing={4} wrap={true} width="hug-contents">
+              <AutoLayout direction="horizontal" spacing={1} fill={"#F5F5F5"} stroke="#eee" strokeWidth={1} cornerRadius={12} padding={2} width="hug-contents">
+                <SimpleCheckbox checked={settings.showFillValues} label="Fill" onClick={() => toggleSetting('showFillValues')} isFirst={true} isLast={true} />
+              </AutoLayout>
+              
+              <AutoLayout direction="horizontal" spacing={1} fill={"#F5F5F5"} stroke="#eee" strokeWidth={1} cornerRadius={12} padding={2} width="hug-contents">
+                <SimpleCheckbox checked={settings.showAppearanceValues} label="Opacity" onClick={() => toggleSetting('showAppearanceValues')} isFirst={true} isLast={true} />
+              </AutoLayout>
+              
+              <AutoLayout direction="horizontal" spacing={1} fill={"#F5F5F5"} stroke="#eee" strokeWidth={1} cornerRadius={12} padding={2} width="hug-contents">
+                <SimpleCheckbox 
+                  checked={settings.hideZeroValues} 
+                  label='Ignore "0" values' 
+                  onClick={() => toggleSetting('hideZeroValues')}
+                  isFirst={true}
+                  isLast={true}
+                />
+              </AutoLayout>
             </AutoLayout>
-            <Text fontSize={11} lineHeight={11} fill={settings.hideZeroValues ? "#106A00" : "#333333"}>Ignore "0" values</Text>
+            
+            {/* Stroke group */}
+            <AutoLayout direction="horizontal" spacing={1} wrap={true} fill={"#F5F5F5"} stroke="#eee" strokeWidth={1} cornerRadius={12} padding={2} width="hug-contents">
+              <SimpleCheckbox checked={settings.showStrokeColorValues} label="Stroke" onClick={() => toggleSetting('showStrokeColorValues')} isFirst={true} />
+              <SimpleCheckbox checked={settings.showStrokeColorValues} label="Stroke color" onClick={() => toggleSetting('showStrokeColorValues')} />
+              <SimpleCheckbox checked={settings.showStrokeWeightValues} label="Weight" onClick={() => toggleSetting('showStrokeWeightValues')} isLast={true} />
+            </AutoLayout>
+            
+            {/* Text group */}
+            <AutoLayout direction="horizontal" spacing={1} wrap={true} fill={"#F5F5F5"} stroke="#eee" strokeWidth={1} cornerRadius={12} padding={2} width="hug-contents">
+              <SimpleCheckbox checked={settings.showFontFamilyValues} label="Text" onClick={() => toggleSetting('showFontFamilyValues')} isFirst={true} />
+              <SimpleCheckbox checked={settings.showFontFamilyValues} label="Family" onClick={() => toggleSetting('showFontFamilyValues')} />
+              <SimpleCheckbox checked={settings.showFontSizeValues} label="Size" onClick={() => toggleSetting('showFontSizeValues')} />
+              <SimpleCheckbox checked={settings.showLineHeightValues} label="Line height" onClick={() => toggleSetting('showLineHeightValues')} />
+              <SimpleCheckbox checked={settings.showLineHeightValues} label="Letter spacing" onClick={() => toggleSetting('showLineHeightValues')} />
+              <SimpleCheckbox checked={settings.showLineHeightValues} label="Paragraph spacing" onClick={() => toggleSetting('showLineHeightValues')} isLast={true} />
+            </AutoLayout>
+            
+            {/* Auto layout / Spacing group */}
+            <AutoLayout direction="horizontal" spacing={1} wrap={true} fill={"#F5F5F5"} stroke="#eee" strokeWidth={1} cornerRadius={12} padding={2} width="hug-contents">
+              <SimpleCheckbox checked={settings.showPaddingValues} label="Auto layout" onClick={() => toggleSetting('showPaddingValues')} isFirst={true} />
+              <SimpleCheckbox checked={settings.showItemSpacingValues} label="Spacing" onClick={() => toggleSetting('showItemSpacingValues')} />
+              <SimpleCheckbox checked={settings.showPaddingTopValues} label="Top" onClick={() => toggleSetting('showPaddingTopValues')} />
+              <SimpleCheckbox checked={settings.showPaddingRightValues} label="Right" onClick={() => toggleSetting('showPaddingRightValues')} />
+              <SimpleCheckbox checked={settings.showPaddingBottomValues} label="Bottom" onClick={() => toggleSetting('showPaddingBottomValues')} />
+              <SimpleCheckbox checked={settings.showPaddingLeftValues} label="Left" onClick={() => toggleSetting('showPaddingLeftValues')} isLast={true} />
+            </AutoLayout>
+            
+            {/* Corner radius group */}
+            <AutoLayout direction="horizontal" spacing={1} wrap={true} fill={"#F5F5F5"} stroke="#eee" strokeWidth={1} cornerRadius={12} padding={2} width="hug-contents">
+              <SimpleCheckbox checked={settings.showAllCornersValues} label="Corner radius" onClick={() => toggleSetting('showAllCornersValues')} isFirst={true} />
+              <SimpleCheckbox checked={settings.showTopLeftRadiusValues} label="Top Left" onClick={() => toggleSetting('showTopLeftRadiusValues')} />
+              <SimpleCheckbox checked={settings.showTopRightRadiusValues} label="Top Right" onClick={() => toggleSetting('showTopRightRadiusValues')} />
+              <SimpleCheckbox checked={settings.showBottomLeftRadiusValues} label="Bottom Left" onClick={() => toggleSetting('showBottomLeftRadiusValues')} />
+              <SimpleCheckbox checked={settings.showBottomRightRadiusValues} label="Bottom Right" onClick={() => toggleSetting('showBottomRightRadiusValues')} isLast={true} />
+            </AutoLayout>
+            
+            {/* Effects group */}
+            <AutoLayout direction="horizontal" spacing={1} wrap={true} fill={"#F5F5F5"} stroke="#eee" strokeWidth={1} cornerRadius={12} padding={2} width="hug-contents">
+              <SimpleCheckbox checked={settings.showEffectValues} label="Effects" onClick={() => toggleSetting('showEffectValues')} isFirst={true} />
+              <SimpleCheckbox checked={settings.showEffectColorValues} label="Effect color" onClick={() => toggleSetting('showEffectColorValues')} />
+              <SimpleCheckbox checked={settings.showEffectValuesValues} label="Effect values" onClick={() => toggleSetting('showEffectValuesValues')} isLast={true} />
+            </AutoLayout>
           </AutoLayout>
-        </AutoLayout>
+        )}
       </AutoLayout>
     </AutoLayout>
   )
@@ -1709,16 +2308,24 @@ const ComponentTable = ({ components, displayedCount, settings }: {
                 
                 <AutoLayout horizontalAlignItems="center" verticalAlignItems="center" height={24} width={70}>
                   <AutoLayout direction="horizontal" spacing={4} verticalAlignItems="center">
-                    {safeComponent.hasUnboundProperties ? (
-                      <XIcon />
-                    ) : (
-                      <CircleCheckIcon />
-                    )}
-                    {safeComponent.hasUnboundProperties && (
-                      <Text fontSize={10} fill="#F44336" fontWeight={600}>
-                        {safeText(safeComponent.unboundProperties.length)}
-                      </Text>
-                    )}
+                    {(() => {
+                      const filteredCount = filterUnboundPropertiesWithZeroValues(safeComponent.unboundProperties).length
+                      const hasFilteredProps = filteredCount > 0
+                      return (
+                        <>
+                          {hasFilteredProps ? (
+                            <XIcon />
+                          ) : (
+                            <CircleCheckIcon />
+                          )}
+                          {hasFilteredProps && (
+                            <Text fontSize={10} fill="#F44336" fontWeight={600}>
+                              {safeText(filteredCount)}
+                            </Text>
+                          )}
+                        </>
+                      )
+                    })()}
                   </AutoLayout>
                 </AutoLayout>
                 
@@ -2242,7 +2849,12 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
             </AutoLayout>
             
             {isSettingsExpanded && (
-              <SettingsPanel settings={settings} setSettings={setSettings} />
+              <SettingsPanel 
+                settings={settings} 
+                setSettings={setSettings}
+                isIndividualPropsExpanded={isIndividualPropsExpanded}
+                setIsIndividualPropsExpanded={setIsIndividualPropsExpanded}
+              />
             )}
           </AutoLayout>
   
