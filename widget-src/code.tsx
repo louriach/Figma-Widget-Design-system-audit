@@ -255,7 +255,7 @@ function Widget() {
     showMissingDescription: true,
     showMissingDocsLink: true,
     showMissingVariables: true,
-    hideZeroValues: false,
+    hideZeroValues: true,
     showFillValues: true,
     // Stroke group
     showStrokeColorValues: true,
@@ -1451,7 +1451,7 @@ const navigateToComponent = async (componentId: string, specificNodeId?: string)
       showMissingDescription: true,
       showMissingDocsLink: true,
       showMissingVariables: true,
-      hideZeroValues: false,
+      hideZeroValues: true,
       showFillValues: true,
       // Stroke group
       showStrokeColorValues: true,
