@@ -1218,16 +1218,6 @@ function Widget() {
     }
   }
 
-  const loadMoreComponents = (pageName: string) => {
-    const currentCount = pageDisplayCounts[pageName] || CHUNK_SIZE
-    const newCount = currentCount + LOAD_MORE_SIZE
-    
-    setPageDisplayCounts({
-      ...pageDisplayCounts,
-      [pageName]: newCount
-    })
-  }
-
   const filterUnboundPropertiesWithZeroValues = (properties: UnboundProperty[]): UnboundProperty[] => {
     return properties.filter(prop => {
       // Granular filtering based on property type and property name
@@ -2125,23 +2115,8 @@ const ComponentTable = ({ components, displayedCount, settings }: {
   
   // Use filtered components 
   const visibleComponents = validComponents.slice(0, displayedCount)
-  const hasMore = validComponents.length > displayedCount
 
-  // Safety check - if too many components, show warning instead
-  if (validComponents.length > 100) {
   return (
-      <AutoLayout direction="vertical" spacing={8} padding={12} fill="#FFF3CD" width="fill-parent">
-        <Text fontSize={12} fill="#856404" fontWeight={600}>
-          ⚠️ Too many components ({validComponents.length})
-        </Text>
-        <Text fontSize={11} fill="#856404" width="fill-parent">
-          This page has too many components to display safely. Consider scanning individual pages instead.
-        </Text>
-      </AutoLayout>
-    )
-  }
-
-    return (
       <AutoLayout direction="vertical" width="fill-parent" stroke="#eee" strokeWidth={1}>
 
         <AutoLayout direction="horizontal" spacing={0} padding={{ vertical: 8, horizontal: 12 }} width="fill-parent" stroke="#eee" strokeWidth={1}>
@@ -2379,26 +2354,6 @@ const ComponentTable = ({ components, displayedCount, settings }: {
             )
           }
         })}
-{hasMore && (
-  <AutoLayout 
-    direction="horizontal" 
-            spacing={4} 
-    padding={16} 
-            horizontalAlignItems="start" 
-    verticalAlignItems="center"
-    width="fill-parent"
-            fill="#fff"
-    onClick={() => loadMoreComponents(safeText(validComponents[0]?.pageName))}
-            hoverStyle={{ fill: "#f0f0f0" }}
-  >
-            <Text fontSize={11} fill="#222" fontWeight={600}>
-              {`Load more (${safeText(validComponents.length - displayedCount)} remaining)`}
-    </Text>
-            <Text fontSize={11} fill="#222">
-      {`Showing ${safeText(displayedCount)} of ${safeText(validComponents.length)}`}
-    </Text>
-  </AutoLayout>
-)}
     </AutoLayout>
   )
 }
@@ -2495,25 +2450,46 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
 
   const LoadAllButton = ({ pageName, totalCount }: { pageName: string, totalCount: number }) => {
     const currentCount = pageDisplayCounts[pageName] || CHUNK_SIZE
+    const remaining = totalCount - currentCount
     
     if (totalCount <= CHUNK_SIZE) return null
     
     return (
       <AutoLayout direction="horizontal" spacing={8} verticalAlignItems="center">
-        <AutoLayout 
-          fill="#FAECFF"
-          cornerRadius={8} 
-          padding={{ vertical: 4, horizontal: 8 }} 
-          onClick={() => setPageDisplayCounts({
-            ...pageDisplayCounts,
-            [pageName]: totalCount
-          })}
-          hoverStyle={{ fill: "#EFC8FD" }}
-        >
-          <Text fontSize={10} fill="#8C00BA">{`Load all (${safeText(totalCount)}) (Figma may crash!)`}</Text>
-        </AutoLayout>
-        
+        {/* Load 10 more button - show when there are items remaining */}
         {currentCount < totalCount && (
+          <AutoLayout 
+            fill="#FAECFF"
+            cornerRadius={8} 
+            padding={{ vertical: 4, horizontal: 8 }} 
+            onClick={() => setPageDisplayCounts({
+              ...pageDisplayCounts,
+              [pageName]: currentCount + LOAD_MORE_SIZE
+            })}
+            hoverStyle={{ fill: "#EFC8FD" }}
+          >
+            <Text fontSize={10} fill="#8C00BA">{`Load ${safeText(Math.min(LOAD_MORE_SIZE, remaining))} more (${safeText(remaining)} remaining)`}</Text>
+          </AutoLayout>
+        )}
+        
+        {/* Load all button - show when not all items are loaded */}
+        {currentCount < totalCount && (
+          <AutoLayout 
+            fill="#FAECFF"
+            cornerRadius={8} 
+            padding={{ vertical: 4, horizontal: 8 }} 
+            onClick={() => setPageDisplayCounts({
+              ...pageDisplayCounts,
+              [pageName]: totalCount
+            })}
+            hoverStyle={{ fill: "#EFC8FD" }}
+          >
+            <Text fontSize={10} fill="#8C00BA">{`Load all (${safeText(totalCount)})`}</Text>
+          </AutoLayout>
+        )}
+        
+        {/* Reset button - show when more than CHUNK_SIZE items are loaded */}
+        {currentCount > CHUNK_SIZE && (
           <AutoLayout 
             fill="#FAECFF"
             cornerRadius={8} 
