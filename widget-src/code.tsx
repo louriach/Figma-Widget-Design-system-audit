@@ -151,6 +151,18 @@ const EntireDocumentIcon = ({ color = "#F57C00", size = 20 }: { color?: string, 
   />
 )
 
+const SelectionIcon = ({ color = "#2E7D32", size = 20 }: { color?: string, size?: number }) => (
+  <SVG
+    src={`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+      <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+      <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+      <path d="M7 12h10"/>
+    </svg>`}
+  />
+)
+
 // Component Set Icon (Dashed border frame with center diamond)
 const ComponentSetIcon = ({ color = "#000000", size = 16 }: { color?: string, size?: number }) => (
   <SVG 
@@ -251,6 +263,7 @@ function Widget() {
   const [isProgressExpanded, setIsProgressExpanded] = useSyncedState('isProgressExpanded', true)
   const [isSettingsExpanded, setIsSettingsExpanded] = useSyncedState('isSettingsExpanded', false)
   const [isIndividualPropsExpanded, setIsIndividualPropsExpanded] = useSyncedState('isIndividualPropsExpanded', false)
+  const [selectionError, setSelectionError] = useSyncedState<string | null>('selectionError', null)
   const [settings, setSettings] = useSyncedState<SettingsState>('settings', {
     showMissingDescription: true,
     showMissingDocsLink: true,
@@ -284,8 +297,9 @@ function Widget() {
     showAppearanceValues: false
   })
 
-  const CHUNK_SIZE = 5
-  const LOAD_MORE_SIZE = 10
+  const CHUNK_SIZE = 25
+  const LOAD_MORE_SIZE = 25
+  const SELECTION_CHUNK_SIZE = 50  // Larger initial load for selection scans
 
   const getNodePath = (node: SceneNode, rootNode: SceneNode): string => {
     const path: string[] = []
@@ -992,6 +1006,7 @@ function Widget() {
   const runQuickScan = async () => {
     setIsQuickScanning(true)
     setQuickScanData(null)
+    setSelectionError(null)
 
     try {
       setCurrentProgress('Running quick scan...')
@@ -2456,7 +2471,7 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
     
     return (
       <AutoLayout direction="horizontal" spacing={8} verticalAlignItems="center">
-        {/* Load 10 more button - show when there are items remaining */}
+        {/* Load more button - show when there are items remaining */}
         {currentCount < totalCount && (
           <AutoLayout 
             fill="#FAECFF"
@@ -2514,6 +2529,7 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
     setExpandedPages([])
     setExpandedComponents([])
     setPageDisplayCounts({})
+    setSelectionError(null)
     
     try {
       if (scanCurrentPageOnly) {
@@ -2635,6 +2651,135 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
     await runDeepScanWithScope(true)
   }
 
+  const runScanSelection = async () => {
+    const selection = figma.currentPage.selection
+    
+    // Check if something is selected
+    if (selection.length === 0) {
+      setSelectionError('Please select a component to scan')
+      return
+    }
+    
+    // Find all components in the selection
+    const selectedComponents: ComponentNode[] = []
+    
+    selection.forEach(node => {
+      if (node.type === 'COMPONENT') {
+        selectedComponents.push(node as ComponentNode)
+      } else if (node.type === 'COMPONENT_SET') {
+        // If component set is selected, get all its variants
+        const variants = (node as ComponentSetNode).findAll((n: SceneNode) => n.type === 'COMPONENT') as ComponentNode[]
+        selectedComponents.push(...variants)
+      } else if ('findAll' in node) {
+        // Check if selection contains any components
+        const componentsInside = node.findAll((n: SceneNode) => n.type === 'COMPONENT') as ComponentNode[]
+        selectedComponents.push(...componentsInside)
+      }
+    })
+    
+    if (selectedComponents.length === 0) {
+      setSelectionError('No components found in selection')
+      return
+    }
+    
+    // Clear any previous error
+    setSelectionError(null)
+    
+    setIsDeepScanning(true)
+    setAuditData([])
+    setPageProgress([])
+    setCurrentProgress(`Scanning ${selectedComponents.length} component${selectedComponents.length > 1 ? 's' : ''} from selection...`)
+    
+    try {
+      const currentPage = figma.currentPage
+      const safePageName = (currentPage.name || '').trim() || 'Current Page'
+      
+      setPageProgress([{
+        name: safePageName,
+        status: 'loading',
+        componentCount: selectedComponents.length
+      }])
+      
+      const processedComponentSets = new Set<string>()
+      const result: ComponentAuditData[] = []
+      
+      // Process each selected component
+      selectedComponents.forEach(component => {
+        let componentSetName: string | undefined
+        let variantProperties: Record<string, string> | undefined
+        let displayName = (component.name || '').trim() || 'Unnamed Component'
+        let isVariant = false
+
+        if (component.parent && component.parent.type === 'COMPONENT_SET') {
+          const componentSet = component.parent as ComponentSetNode
+          componentSetName = (componentSet.name || '').trim() || 'Unnamed Component Set'
+          
+          try {
+            variantProperties = component.variantProperties || {}
+            isVariant = true
+          } catch (error) {
+            console.warn('Error getting variant properties:', error)
+            variantProperties = {}
+          }
+        }
+
+        const unboundCheck = checkForUnboundProperties(component)
+
+        result.push({
+          id: component.id,
+          name: displayName,
+          componentSetName,
+          variantProperties,
+          pageName: safePageName,
+          hasDescription: hasDescription(component),
+          hasDocumentationLink: hasDocumentationLink(component),
+          hasUnboundProperties: unboundCheck.hasUnbound,
+          unboundProperties: unboundCheck.properties,
+          isHiddenFromPublishing: isHiddenFromPublishing(componentSetName || displayName),
+          isOnCurrentPage: true,
+          isVariant,
+          hasExpandableContent: unboundCheck.hasUnbound
+        })
+      })
+      
+      setPageProgress([{
+        name: safePageName,
+        status: 'complete',
+        componentCount: selectedComponents.length
+      }])
+      
+      // Clean and serialize the data before storing
+      try {
+        const cleanedComponents = cleanComponentData(result)
+        setAuditData(cleanedComponents)
+      } catch (dataError) {
+        console.error(`Error setting audit data for selection:`, dataError)
+        setAuditData([])
+      }
+      
+      setExpandedPages([safePageName])
+      setPageDisplayCounts({ [safePageName]: SELECTION_CHUNK_SIZE })
+      setCurrentProgress(`Scan complete: Found ${selectedComponents.length} component${selectedComponents.length > 1 ? 's' : ''} in selection`)
+      setLastScanTime(new Date().toUTCString())
+      
+      // Auto-collapse the progress accordion after scan completes
+      setTimeout(() => {
+        setIsProgressExpanded(false)
+      }, 1000)
+      
+    } catch (error) {
+      console.error('Error scanning selection:', error)
+      figma.notify('❌ Error scanning selection', { error: true })
+      setCurrentProgress('Error occurred during scan')
+    } finally {
+      setIsDeepScanning(false)
+      // Clear page progress after a delay
+      setTimeout(() => {
+        setPageProgress([])
+      }, 3000)
+    }
+  }
+
   const runDeepScanAllPages = async () => {
     try {
       // Step 1: Run quick scan first to ensure proper initialization
@@ -2703,7 +2848,7 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
         <AutoLayout direction="vertical" spacing={8} width="fill-parent">
           
           {/* Quick Scan Option */}
-          <AutoLayout direction="vertical" spacing={8} padding={12} fill="#FAECFF" cornerRadius={16} width="fill-parent">
+          <AutoLayout direction="vertical" spacing={8} padding={12} fill="#FAECFF" stroke="#ECCBF8" strokeWidth={1} cornerRadius={16} width="fill-parent">
             <AutoLayout direction="vertical" spacing={4} width="fill-parent">
               <AutoLayout direction="horizontal" spacing={4} verticalAlignItems="center">
                 <QuickScanIcon color="#8C00BA" size={16} />
@@ -2720,15 +2865,47 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
               stroke="#CB3BFE"
               strokeWidth={1}
               onClick={runQuickScan}
-              hoverStyle={{ fill: "#FAECFF" }}
+              hoverStyle={{ fill: "#F6DFFE" }}
               width="hug-contents"
             >
               <Text fontSize={12} fill="#6D138B" fontWeight={600}>Start quick scan</Text>
             </AutoLayout>
           </AutoLayout>
 
+          {/* Selection Scan Option */}
+          <AutoLayout direction="vertical" spacing={8} padding={12} fill="#ECFEED" stroke="#CDEED0" strokeWidth={1} cornerRadius={16} width="fill-parent">
+            <AutoLayout direction="vertical" spacing={4} width="fill-parent">
+              <AutoLayout direction="horizontal" spacing={4} verticalAlignItems="center">
+                <SelectionIcon color="#2E7D32" size={16} />
+                <Text fontSize={12} fontWeight={600} fill="#2E7D32">Selection</Text>
+              </AutoLayout>
+              <Text fontSize={11} fill="#2E7D32" width="fill-parent">
+                Detailed analysis of the currently selected component(s). Perfect for quick spot-checks.
+              </Text>
+            </AutoLayout>
+            
+            {selectionError && (
+              <AutoLayout direction="vertical" spacing={4} padding={8} fill="#EC2F4C" cornerRadius={8} width="fill-parent">
+                <Text fontSize={11} fill="#FFEBEB" fontWeight={600}>⚠️ {selectionError}</Text>
+              </AutoLayout>
+            )}
+            
+            <AutoLayout 
+              fill="#D3F9D6"
+              cornerRadius={8} 
+              padding={{ vertical: 6, horizontal: 10 }} 
+              stroke="#4CAF50"
+              strokeWidth={1}
+              onClick={runScanSelection}
+              hoverStyle={{ fill: "#E3FBE5" }}
+              width="hug-contents"
+            >
+              <Text fontSize={12} fill="#1B5E20" fontWeight={600}>Scan selection</Text>
+            </AutoLayout>
+          </AutoLayout>
+
           {/* Current Page Deep Scan Option */}
-          <AutoLayout direction="vertical" spacing={8} padding={12} fill="#F0F8FF" cornerRadius={16} width="fill-parent">
+          <AutoLayout direction="vertical" spacing={8} padding={12} fill="#F0F8FF" stroke="#C8E5FF" strokeWidth={1} cornerRadius={16} width="fill-parent">
             <AutoLayout direction="vertical" spacing={4} width="fill-parent">
               <AutoLayout direction="horizontal" spacing={4} verticalAlignItems="center">
                 <CurrentPageIcon color="#1976D2" size={16} />
@@ -2739,13 +2916,13 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
               </Text>
             </AutoLayout>
             <AutoLayout 
-              fill="#D0EBFF"
+              fill="#CFE9FD"
               cornerRadius={8} 
               padding={{ vertical: 6, horizontal: 10 }} 
               stroke="#2B94EB"
               strokeWidth={1}
               onClick={runDeepScanCurrentPage}
-              hoverStyle={{ fill: "#F0F8FF" }}
+              hoverStyle={{ fill: "#DFF0FE" }}
               width="hug-contents"
             >
               <Text fontSize={12} fill="#0C4990" fontWeight={600}>Scan current page</Text>
@@ -2753,7 +2930,7 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
           </AutoLayout>
 
           {/* All Pages Deep Scan Option */}
-          <AutoLayout direction="vertical" spacing={8} padding={12} fill="#FFF3CD" cornerRadius={16} width="fill-parent">
+          <AutoLayout direction="vertical" spacing={8} padding={12} fill="#FFF6DB" stroke="#F9E5A7" strokeWidth={1} cornerRadius={16} width="fill-parent">
             <AutoLayout direction="vertical" spacing={4} width="fill-parent">
               <AutoLayout direction="horizontal" spacing={4} verticalAlignItems="center">
                 <EntireDocumentIcon color="#856404" size={16} />
@@ -2764,13 +2941,13 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
               </Text>
             </AutoLayout>
             <AutoLayout 
-              fill="#FEE591"
+              fill="#FFEFB8"
               cornerRadius={8} 
               padding={{ vertical: 6, horizontal: 10 }} 
               stroke="#AA8000"
               strokeWidth={1}
               onClick={runDeepScanAllPages}
-              hoverStyle={{ fill: "#FFF3CD" }}
+              hoverStyle={{ fill: "#FEF4D2" }}
               width="hug-contents"
             >
               <Text fontSize={12} fill="#5F4301" fontWeight={600}>Scan whole file</Text>
