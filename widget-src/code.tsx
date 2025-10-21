@@ -1158,7 +1158,7 @@ function Widget() {
         type: 'SOLID',
         color: { r: 0.98, g: 0.95, b: 1 }
       }]
-      statsFrame.cornerRadius = 16
+      statsFrame.cornerRadius = 8
       statsFrame.paddingTop = 12
       statsFrame.paddingBottom = 12
       statsFrame.paddingLeft = 12
@@ -1211,14 +1211,85 @@ function Widget() {
 
       frame.appendChild(statsFrame)
 
-      // Position the frame to the right of the widget with some spacing
-      // Widget is 640px wide, so place frame 700px to the right to give some gap
-      frame.x = figma.viewport.center.x + 400
-      frame.y = figma.viewport.center.y
+      // JSON Data section
+      const jsonContent = JSON.stringify({
+        ...quickScanData,
+        exportedAt: new Date().toISOString(),
+        documentName: figma.root.name
+      }, null, 2)
+
+      const jsonSectionFrame = figma.createFrame()
+      jsonSectionFrame.name = "JSON Data"
+      jsonSectionFrame.layoutMode = 'VERTICAL'
+      jsonSectionFrame.itemSpacing = 8
+      jsonSectionFrame.primaryAxisSizingMode = 'AUTO'
+      jsonSectionFrame.counterAxisSizingMode = 'AUTO'
+      jsonSectionFrame.fills = [{
+        type: 'SOLID',
+        color: { r: 0.97, g: 0.97, b: 0.97 }
+      }]
+      jsonSectionFrame.strokes = [{ 
+        type: 'SOLID',
+        color: { r: 0.929, g: 0.929, b: 0.929 }
+      }]
+      jsonSectionFrame.strokeWeight = 1
+      jsonSectionFrame.cornerRadius = 8
+      jsonSectionFrame.paddingTop = 12
+      jsonSectionFrame.paddingBottom = 12
+      jsonSectionFrame.paddingLeft = 12
+      jsonSectionFrame.paddingRight = 12
+      jsonSectionFrame.resize(368, jsonSectionFrame.height)
+
+      const jsonTitle = figma.createText()
+      jsonTitle.fontName = { family: "Inter", style: "Bold" }
+      jsonTitle.fontSize = 10
+      jsonTitle.characters = "📋 JSON Export – For versioning"
+      jsonTitle.fills = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }]
+      jsonSectionFrame.appendChild(jsonTitle)
+
+      const jsonText = figma.createText()
+      jsonText.fontName = { family: "Inter", style: "Regular" }
+      jsonText.fontSize = 10
+      jsonText.lineHeight = { unit: 'PIXELS', value: 14 }
+      jsonText.characters = jsonContent
+      jsonText.fills = [{ type: 'SOLID', color: { r: 0.133, g: 0.133, b: 0.133 } }]
+      jsonText.textAutoResize = 'WIDTH_AND_HEIGHT'
+      jsonText.resize(344, jsonText.height)
+      jsonSectionFrame.appendChild(jsonText)
+
+      const jsonInstruction = figma.createText()
+      jsonInstruction.fontName = { family: "Inter", style: "Regular" }
+      jsonInstruction.fontSize = 10
+      jsonInstruction.characters = "💡 Select and copy this JSON data to save as a .json file"
+      jsonInstruction.fills = [{ type: 'SOLID', color: { r: 0.5, g: 0.5, b: 0.5 } }]
+      jsonInstruction.resize(344, jsonInstruction.height)
+      jsonSectionFrame.appendChild(jsonInstruction)
+
+      frame.appendChild(jsonSectionFrame)
+
+      // Position the frame 120px to the right of the widget at the same Y level
+      // Get the widget's position using async getNodeById
+      try {
+        const widgetNode = await figma.getNodeByIdAsync(figma.widgetId!)
+        if (widgetNode && 'x' in widgetNode && 'y' in widgetNode && 'width' in widgetNode) {
+          frame.x = widgetNode.x + widgetNode.width + 120
+          frame.y = widgetNode.y
+        } else {
+          // Fallback to viewport center if widget not found
+          frame.x = figma.viewport.center.x + 400
+          frame.y = figma.viewport.center.y
+        }
+      } catch (err) {
+        // Fallback to viewport center on error
+        frame.x = figma.viewport.center.x + 400
+        frame.y = figma.viewport.center.y
+      }
 
       // Select the frame so user can see it
       figma.currentPage.selection = [frame]
       figma.viewport.scrollAndZoomIntoView([frame])
+
+      figma.notify('✅ Summary frame created on canvas!')
 
     } catch (error) {
       console.error('Error creating summary frame:', error)
@@ -2849,27 +2920,99 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
           
           {/* Quick Scan Option */}
           <AutoLayout direction="vertical" spacing={8} padding={12} fill="#FAECFF" stroke="#ECCBF8" strokeWidth={1} cornerRadius={16} width="fill-parent">
-            <AutoLayout direction="vertical" spacing={4} width="fill-parent">
-              <AutoLayout direction="horizontal" spacing={4} verticalAlignItems="center">
-                <QuickScanIcon color="#8C00BA" size={16} />
-                <Text fontSize={12} fontWeight={600} fill="#8C00BA">Quick scan</Text>
+            <AutoLayout direction="horizontal" spacing={4} verticalAlignItems="center">
+              <QuickScanIcon color="#8C00BA" size={16} />
+              <Text fontSize={12} fontWeight={600} fill="#8C00BA">Quick scan</Text>
+            </AutoLayout>
+            
+            {!quickScanData ? (
+              <>
+                <AutoLayout direction="vertical" spacing={4} width="fill-parent">
+                  <Text fontSize={11} fill="#8C00BA" width="fill-parent">
+                    Fast overview of all components across your document. Shows counts, missing descriptions, and documentation links.
+                  </Text>
+                </AutoLayout>
+                <AutoLayout 
+                  fill="#F3D0FF"
+                  cornerRadius={8} 
+                  padding={{ vertical: 6, horizontal: 10 }} 
+                  stroke="#CB3BFE"
+                  strokeWidth={1}
+                  onClick={runQuickScan}
+                  hoverStyle={{ fill: "#F6DFFE" }}
+                  width="hug-contents"
+                >
+                  <Text fontSize={12} fill="#6D138B" fontWeight={600}>Start quick scan</Text>
+                </AutoLayout>
+              </>
+            ) : (
+              <AutoLayout direction="vertical" spacing={8} width="fill-parent">
+                <AutoLayout direction="horizontal" spacing={4} width="fill-parent" wrap={true}>
+                  <Text fontSize={16} fill="#8C00BA">Out</Text>
+                  <Text fontSize={16} fill="#8C00BA">of</Text>
+                  <Text fontSize={16} fontWeight={700} fill="#8C00BA">{safeText(quickScanData.totalPages)}</Text>
+                  <Text fontSize={16} fill="#8C00BA">pages,</Text>
+                  <Text fontSize={16} fontWeight={700} fill="#8C00BA">{safeText(quickScanData.pagesWithComponents)}</Text>
+                  <Text fontSize={16} fill="#8C00BA">have</Text>
+                  <Text fontSize={16} fill="#8C00BA">components.</Text>
+                  <Text fontSize={16} fill="#8C00BA">We</Text>
+                  <Text fontSize={16} fill="#8C00BA">found</Text>
+                  <Text fontSize={16} fontWeight={700} fill="#8C00BA">{safeText(quickScanData.uniqueComponents)}</Text>
+                  <Text fontSize={16} fill="#8C00BA">unique</Text>
+                  <Text fontSize={16} fill="#8C00BA">components</Text>
+                  <Text fontSize={16} fill="#8C00BA">and</Text>
+                  <Text fontSize={16} fontWeight={700} fill="#8C00BA">{safeText(quickScanData.totalVariants)}</Text>
+                  <Text fontSize={16} fill="#8C00BA">total</Text>
+                  <Text fontSize={16} fill="#8C00BA">variants.</Text>
+                  
+                  <Text fontSize={16} fontWeight={700} fill="#8C00BA">{safeText(quickScanData.withoutDescription)}/{safeText(quickScanData.totalVariants)}</Text>
+                  <Text fontSize={16} fill="#8C00BA">components</Text>
+                  <Text fontSize={16} fill="#8C00BA">do</Text>
+                  <Text fontSize={16} fill="#8C00BA">not</Text>
+                  <Text fontSize={16} fill="#8C00BA">have</Text>
+                  <Text fontSize={16} fill="#8C00BA">a</Text>
+                  <Text fontSize={16} fill="#8C00BA">description</Text>
+                  <Text fontSize={16} fill="#8C00BA">set,</Text>
+                  <Text fontSize={16} fill="#8C00BA">and</Text>
+                  
+                  <Text fontSize={16} fontWeight={700} fill="#8C00BA">{safeText(quickScanData.withoutDocs)}/{safeText(quickScanData.totalVariants)}</Text>
+                  <Text fontSize={16} fill="#8C00BA">components</Text>
+                  <Text fontSize={16} fill="#8C00BA">do</Text>
+                  <Text fontSize={16} fill="#8C00BA">not</Text>
+                  <Text fontSize={16} fill="#8C00BA">have</Text>
+                  <Text fontSize={16} fill="#8C00BA">a</Text>
+                  <Text fontSize={16} fill="#8C00BA">documentation</Text>
+                  <Text fontSize={16} fill="#8C00BA">link.</Text>
+                  
+                  <Text fontSize={16} fontWeight={700} fill="#8C00BA">{safeText(quickScanData.hiddenComponents)}</Text>
+                  <Text fontSize={16} fill="#8C00BA">components</Text>
+                  <Text fontSize={16} fill="#8C00BA">are</Text>
+                  <Text fontSize={16} fill="#8C00BA">hidden</Text>
+                  <Text fontSize={16} fill="#8C00BA">from</Text>
+                  <Text fontSize={16} fill="#8C00BA">publishing.</Text>
+                </AutoLayout>
+
+                <AutoLayout direction="vertical" spacing={8} width="fill-parent">
+                  <AutoLayout 
+                    fill="#EFBEFF"
+                    cornerRadius={8} 
+                    padding={{ vertical: 6, horizontal: 10 }} 
+                    stroke="#E498FF"
+                    strokeWidth={1}
+                    onClick={createSummaryFrame}
+                    hoverStyle={{ fill: "#FCF5FF", stroke: "#8C00BA" }}
+                  >
+                    <Text fontSize={12} fill="#69008C" fontWeight={600}>Add summary to canvas</Text>
+                  </AutoLayout>
+
+                  {lastScanTime && (
+                    <Text fontSize={11} fill="#8C00BA">
+                      {`Scanned at ${safeText(lastScanTime)}`}
+                    </Text>
+                  )}
+                </AutoLayout>
               </AutoLayout>
-              <Text fontSize={11} fill="#8C00BA" width="fill-parent">
-                Fast overview of all components across your document. Shows counts, missing descriptions, and documentation links.
-              </Text>
-            </AutoLayout>
-            <AutoLayout 
-              fill="#F3D0FF"
-              cornerRadius={8} 
-              padding={{ vertical: 6, horizontal: 10 }} 
-              stroke="#CB3BFE"
-              strokeWidth={1}
-              onClick={runQuickScan}
-              hoverStyle={{ fill: "#F6DFFE" }}
-              width="hug-contents"
-            >
-              <Text fontSize={12} fill="#6D138B" fontWeight={600}>Start quick scan</Text>
-            </AutoLayout>
+            )}
           </AutoLayout>
 
           {/* Selection Scan Option */}
@@ -2964,10 +3107,7 @@ const PageAccordion = ({ pageData }: { pageData: PageData }) => {
         </AutoLayout>
       )}
 
-      {/* Quick Scan Results */}
-      <QuickScanResults />
-
-            {/* Deep Scan Results */}
+      {/* Deep Scan Results */}
       {auditData.length > 0 && (
         <>
         <AutoLayout direction="vertical" spacing={2} width="fill-parent">
